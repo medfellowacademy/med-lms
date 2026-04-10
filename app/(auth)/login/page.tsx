@@ -10,9 +10,6 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const [setupMode, setSetupMode] = useState(false)
-  const [setupLoading, setSetupLoading] = useState(false)
-  const [setupResult, setSetupResult] = useState<{ email: string; password: string } | null>(null)
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
@@ -41,25 +38,6 @@ export default function LoginPage() {
     setLoading(false)
   }
 
-  async function handleSetup() {
-    setSetupLoading(true)
-    setError('')
-    const res = await fetch('/api/setup', { method: 'POST' })
-    const data = await res.json()
-
-    if (!res.ok) {
-      setError(data.error || 'Setup failed')
-      setSetupLoading(false)
-      return
-    }
-
-    setSetupResult({ email: data.email, password: data.password })
-    setEmail(data.email)
-    setPassword(data.password)
-    setSetupMode(false)
-    setSetupLoading(false)
-  }
-
   return (
     <div style={{ minHeight: '100vh', background: 'var(--bg)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <div style={{ width: '100%', maxWidth: 420, padding: '0 20px' }}>
@@ -80,27 +58,6 @@ export default function LoginPage() {
           </h1>
           <p style={{ fontSize: 13, color: 'var(--muted)' }}>Sign in to your account</p>
         </div>
-
-        {/* Setup success banner */}
-        {setupResult && (
-          <div style={{
-            background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10,
-            padding: '14px 16px', marginBottom: 16
-          }}>
-            <p style={{ fontSize: 13, fontWeight: 600, color: '#15803d', marginBottom: 6 }}>
-              Admin account created!
-            </p>
-            <p style={{ fontSize: 12, color: '#166534', marginBottom: 4 }}>
-              Email: <strong>{setupResult.email}</strong>
-            </p>
-            <p style={{ fontSize: 12, color: '#166534' }}>
-              Password: <strong>{setupResult.password}</strong>
-            </p>
-            <p style={{ fontSize: 11, color: '#15803d', marginTop: 8, opacity: 0.8 }}>
-              Credentials are pre-filled below. Click Sign In.
-            </p>
-          </div>
-        )}
 
         {/* Login Form */}
         <div style={{
@@ -162,64 +119,6 @@ export default function LoginPage() {
               {loading ? 'Signing in…' : 'Sign In'}
             </button>
           </form>
-
-          {/* Divider */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '20px 0' }}>
-            <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
-            <span style={{ fontSize: 11, color: 'var(--muted)' }}>First time?</span>
-            <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
-          </div>
-
-          {/* Setup button */}
-          {!setupMode ? (
-            <button
-              onClick={() => setSetupMode(true)}
-              style={{
-                width: '100%', padding: '10px 0', background: 'transparent',
-                color: 'var(--teal)', border: '1px solid var(--teal)', borderRadius: 8,
-                fontSize: 13, fontWeight: 500, cursor: 'pointer',
-                fontFamily: "'DM Sans', sans-serif"
-              }}
-            >
-              Create Default Admin Account
-            </button>
-          ) : (
-            <div style={{ background: 'var(--teal-light)', borderRadius: 8, padding: 16 }}>
-              <p style={{ fontSize: 13, color: 'var(--teal)', fontWeight: 500, marginBottom: 6 }}>
-                This will create an admin with:
-              </p>
-              <p style={{ fontSize: 12, color: 'var(--teal)', marginBottom: 4 }}>
-                Email: <strong>admin@medfellow.com</strong>
-              </p>
-              <p style={{ fontSize: 12, color: 'var(--teal)', marginBottom: 14 }}>
-                Password: <strong>MedAdmin@2025</strong>
-              </p>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button
-                  onClick={handleSetup}
-                  disabled={setupLoading}
-                  style={{
-                    flex: 1, padding: '9px 0', background: 'var(--teal)', color: 'white',
-                    border: 'none', borderRadius: 7, fontSize: 13, fontWeight: 500,
-                    cursor: setupLoading ? 'not-allowed' : 'pointer',
-                    opacity: setupLoading ? 0.7 : 1, fontFamily: "'DM Sans', sans-serif"
-                  }}
-                >
-                  {setupLoading ? 'Creating…' : 'Confirm Create'}
-                </button>
-                <button
-                  onClick={() => setSetupMode(false)}
-                  style={{
-                    padding: '9px 16px', background: 'transparent', color: 'var(--teal)',
-                    border: '1px solid var(--teal)', borderRadius: 7, fontSize: 13,
-                    cursor: 'pointer', fontFamily: "'DM Sans', sans-serif"
-                  }}
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          )}
         </div>
       </div>
     </div>
