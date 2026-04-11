@@ -21,13 +21,15 @@ export default function UploadPage({ params }: { params: Promise<{ id: string }>
   const searchParams = useSearchParams()
   const preselectedModule = searchParams.get('module') || ''
   const preselectedSubTopic = searchParams.get('subtopic') || ''
+  const preselectedScope = searchParams.get('scope') === 'course-ebook' ? 'course-ebook' : 'module'
 
   const supabase = createClient()
   const [modules, setModules] = useState<Module[]>([])
   const [subTopics, setSubTopics] = useState<SubTopic[]>([])
+  const [uploadTarget, setUploadTarget] = useState<'module' | 'course-ebook'>(preselectedScope)
   const [selectedModule, setSelectedModule] = useState(preselectedModule)
   const [selectedSubTopic, setSelectedSubTopic] = useState(preselectedSubTopic)
-  const [contentType, setContentType] = useState<'video' | 'ppt' | 'pdf'>('video')
+  const [contentType, setContentType] = useState<'video' | 'ppt' | 'pdf'>(preselectedScope === 'course-ebook' ? 'pdf' : 'video')
   const [contentTitle, setContentTitle] = useState('')
   const [file, setFile] = useState<File | null>(null)
   const [uploading, setUploading] = useState(false)
@@ -46,6 +48,13 @@ export default function UploadPage({ params }: { params: Promise<{ id: string }>
   }, [courseId])
 
   // Load sub-topics when module changes
+  useEffect(() => {
+    if (uploadTarget === 'course-ebook') {
+      setContentType('pdf')
+      setSelectedSubTopic('')
+    }
+  }, [uploadTarget])
+
   useEffect(() => {
     if (selectedModule) {
       supabase.from('sub_topics')
@@ -111,7 +120,8 @@ export default function UploadPage({ params }: { params: Promise<{ id: string }>
 
   async function handleUpload(e: React.FormEvent) {
     e.preventDefault()
-    if (!file || !selectedModule || !contentTitle.trim()) return
+    if (!file || !contentTitle.trim()) return
+    if (uploadTarget === 'module' && !selectedModule) return
 
     // Validate file
     const validationError = validateFile(file, contentType)
@@ -127,7 +137,8 @@ export default function UploadPage({ params }: { params: Promise<{ id: string }>
 
     const ext = file.name.split('.').pop()
     const fileName = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
-    const storagePath = `${folderMap[contentType]}/${fileName}`
+  const storageFolder = uploadTarget === 'course-ebook' ? 'course-ebooks' : folderMap[contentType]
+  const storagePath = `${storageFolder}/${fileName}`
 
     setProgress(30)
     const { error: storageError } = await supabase.storage
@@ -142,20 +153,31 @@ export default function UploadPage({ params }: { params: Promise<{ id: string }>
     }
 
     setProgress(80)
-    const insertData: any = {
-      module_id: selectedModule,
-      type: contentType,
-      title: contentTitle.trim(),
-      storage_path: storagePath,
-      order_index: 0,
-    }
+    let dbError: { message: string } | null = null
 
-    // Add sub_topic_id if a sub-topic is selected
-    if (selectedSubTopic) {
-      insertData.sub_topic_id = selectedSubTopic
-    }
+    if (uploadTarget === 'course-ebook') {
+      const { error } = await supabase.from('course_ebooks').insert({
+        course_id: courseId,
+        title: contentTitle.trim(),
+        storage_path: storagePath,
+      })
+      dbError = error
+    } else {
+      const insertData: any = {
+        module_id: selectedModule,
+        type: contentType,
+        title: contentTitle.trim(),
+        storage_path: storagePath,
+        order_index: 0,
+      }
 
-    const { error: dbError } = await supabase.from('module_content').insert(insertData)
+      if (selectedSubTopic) {
+        insertData.sub_topic_id = selectedSubTopic
+      }
+
+      const { error } = await supabase.from('module_content').insert(insertData)
+      dbError = error
+    }
 
     if (dbError) {
       setError('Failed to save record: ' + dbError.message)
@@ -189,7 +211,11 @@ export default function UploadPage({ params }: { params: Promise<{ id: string }>
         </button>
         <div>
           <h1 style={{ fontFamily: "'DM Serif Display', serif", fontSize: 22 }}>Upload Content</h1>
-          <p style={{ fontSize: 13, color: 'var(--muted)', marginTop: 2 }}>Add videos, presentations, or PDFs to a module</p>
+          <p style={{ fontSize: 13, color: 'var(--muted)', marginTop: 2 }}>
+            {uploadTarget === 'course-ebook'
+              ? 'Upload a PDF that belongs to the whole course'
+              : 'Add videos, presentations, or PDFs to a module'}
+          </p>
         </div>
       </div>
 
@@ -201,7 +227,7 @@ export default function UploadPage({ params }: { params: Promise<{ id: string }>
             background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8,
             padding: '10px 14px', marginBottom: 20, fontSize: 13, color: '#15803d'
           }}>
-            Content uploaded successfully!
+            {uploadTarget === 'course-ebook' ? 'Course e-book uploaded successfully!' : 'Content uploaded successfully!'}
           </div>
         )}
         {error && (
@@ -214,28 +240,53 @@ export default function UploadPage({ params }: { params: Promise<{ id: string }>
         )}
 
         <form onSubmit={handleUpload}>
-          {/* Module selector */}
           <div style={{ marginBottom: 16 }}>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 500, marginBottom: 6 }}>Module *</label>
-            <select
-              value={selectedModule}
-              onChange={e => setSelectedModule(e.target.value)}
-              required
-              style={{
-                width: '100%', padding: '9px 12px', border: '1px solid var(--border)',
-                borderRadius: 7, fontSize: 13, outline: 'none', background: 'white',
-                fontFamily: "'DM Sans', sans-serif"
-              }}
-            >
-              <option value="">Select a module…</option>
-              {modules.map(m => (
-                <option key={m.id} value={m.id}>{m.title}</option>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 500, marginBottom: 8 }}>Upload To</label>
+            <div style={{ display: 'flex', gap: 10 }}>
+              {[
+                { value: 'course-ebook', label: 'Course E-Book' },
+                { value: 'module', label: 'Module Content' },
+              ].map(option => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => setUploadTarget(option.value as 'module' | 'course-ebook')}
+                  style={{
+                    flex: 1, padding: '9px 0', fontSize: 13, fontWeight: uploadTarget === option.value ? 500 : 400,
+                    background: uploadTarget === option.value ? 'var(--teal-light)' : 'var(--bg)',
+                    color: uploadTarget === option.value ? 'var(--teal)' : 'var(--muted)',
+                    border: `1px solid ${uploadTarget === option.value ? '#9FE1CB' : 'var(--border)'}`,
+                    borderRadius: 7, cursor: 'pointer', fontFamily: "'DM Sans', sans-serif"
+                  }}
+                >
+                  {option.label}
+                </button>
               ))}
-            </select>
+            </div>
           </div>
 
-          {/* Sub-topic selector (optional) */}
-          {subTopics.length > 0 && (
+          {uploadTarget === 'module' && (
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 500, marginBottom: 6 }}>Module *</label>
+              <select
+                value={selectedModule}
+                onChange={e => setSelectedModule(e.target.value)}
+                required
+                style={{
+                  width: '100%', padding: '9px 12px', border: '1px solid var(--border)',
+                  borderRadius: 7, fontSize: 13, outline: 'none', background: 'white',
+                  fontFamily: "'DM Sans', sans-serif"
+                }}
+              >
+                <option value="">Select a module…</option>
+                {modules.map(m => (
+                  <option key={m.id} value={m.id}>{m.title}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {uploadTarget === 'module' && subTopics.length > 0 && (
             <div style={{ marginBottom: 16 }}>
               <label style={{ display: 'block', fontSize: 12, fontWeight: 500, marginBottom: 6 }}>
                 Sub-Topic (Optional)
@@ -260,29 +311,37 @@ export default function UploadPage({ params }: { params: Promise<{ id: string }>
             </div>
           )}
 
-          {/* Content type */}
-          <div style={{ marginBottom: 16 }}>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 500, marginBottom: 8 }}>Content Type *</label>
-            <div style={{ display: 'flex', gap: 10 }}>
-              {(['video', 'ppt', 'pdf'] as const).map(type => (
-                <button
-                  key={type}
-                  type="button"
-                  onClick={() => setContentType(type)}
-                  style={{
-                    flex: 1, padding: '9px 0', fontSize: 13, fontWeight: contentType === type ? 500 : 400,
-                    background: contentType === type ? 'var(--teal-light)' : 'var(--bg)',
-                    color: contentType === type ? 'var(--teal)' : 'var(--muted)',
-                    border: `1px solid ${contentType === type ? '#9FE1CB' : 'var(--border)'}`,
-                    borderRadius: 7, cursor: 'pointer', textTransform: 'uppercase',
-                    fontFamily: "'DM Sans', sans-serif"
-                  }}
-                >
-                  {type}
-                </button>
-              ))}
+          {uploadTarget === 'module' ? (
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 500, marginBottom: 8 }}>Content Type *</label>
+              <div style={{ display: 'flex', gap: 10 }}>
+                {(['video', 'ppt', 'pdf'] as const).map(type => (
+                  <button
+                    key={type}
+                    type="button"
+                    onClick={() => setContentType(type)}
+                    style={{
+                      flex: 1, padding: '9px 0', fontSize: 13, fontWeight: contentType === type ? 500 : 400,
+                      background: contentType === type ? 'var(--teal-light)' : 'var(--bg)',
+                      color: contentType === type ? 'var(--teal)' : 'var(--muted)',
+                      border: `1px solid ${contentType === type ? '#9FE1CB' : 'var(--border)'}`,
+                      borderRadius: 7, cursor: 'pointer', textTransform: 'uppercase',
+                      fontFamily: "'DM Sans', sans-serif"
+                    }}
+                  >
+                    {type}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
+          ) : (
+            <div style={{
+              marginBottom: 16, padding: '10px 12px', borderRadius: 8,
+              border: '1px solid #fbcfe8', background: '#fdf2f8', fontSize: 12, color: '#9d174d'
+            }}>
+              Course e-books are stored as PDF resources at the course level.
+            </div>
+          )}
 
           {/* Title */}
           <div style={{ marginBottom: 16 }}>
@@ -291,7 +350,7 @@ export default function UploadPage({ params }: { params: Promise<{ id: string }>
               value={contentTitle}
               onChange={e => setContentTitle(e.target.value)}
               required
-              placeholder="e.g. Lecture 2.1 — Normal Sinus Rhythm"
+              placeholder={uploadTarget === 'course-ebook' ? 'e.g. Cardiology Handbook' : 'e.g. Lecture 2.1 - Normal Sinus Rhythm'}
               style={{
                 width: '100%', padding: '9px 12px', border: '1px solid var(--border)',
                 borderRadius: 7, fontSize: 13, outline: 'none', fontFamily: "'DM Sans', sans-serif"
@@ -356,7 +415,7 @@ export default function UploadPage({ params }: { params: Promise<{ id: string }>
               fontFamily: "'DM Sans', sans-serif"
             }}
           >
-            {uploading ? 'Uploading…' : 'Upload Content'}
+            {uploading ? 'Uploading…' : uploadTarget === 'course-ebook' ? 'Upload E-Book' : 'Upload Content'}
           </button>
         </form>
       </div>

@@ -29,6 +29,12 @@ export default async function StudentCoursePage({ params }: { params: Promise<{ 
 
   if (!course) redirect('/student/courses')
 
+  const { data: courseEbooks } = await supabase
+    .from('course_ebooks')
+    .select('id, course_id, title, storage_path, created_at')
+    .eq('course_id', courseId)
+    .order('created_at')
+
   // Get ALL modules for this course (students should see full course structure)
   // Use service role to bypass RLS so students can see locked modules (but not access content)
   const serviceSupabase = createServiceSupabase()
@@ -111,6 +117,7 @@ export default async function StudentCoursePage({ params }: { params: Promise<{ 
   return (
     <StudentCourseClient
       course={course}
+      courseEbooks={courseEbooks || []}
       modules={modules || []}
       subTopicsByModule={subTopicsByModule}
       contentByModule={contentByModule}

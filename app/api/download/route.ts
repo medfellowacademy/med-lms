@@ -20,6 +20,23 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Missing path' }, { status: 400 })
   }
 
+  const [{ data: moduleContent }, { data: courseEbook }] = await Promise.all([
+    supabase
+      .from('module_content')
+      .select('id')
+      .eq('storage_path', path)
+      .maybeSingle(),
+    supabase
+      .from('course_ebooks')
+      .select('id')
+      .eq('storage_path', path)
+      .maybeSingle(),
+  ])
+
+  if (!moduleContent && !courseEbook) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
   // Generate a short-lived signed URL (60 seconds)
   const { data, error } = await supabase.storage
     .from('medfellow-content')

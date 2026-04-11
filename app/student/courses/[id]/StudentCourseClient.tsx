@@ -28,8 +28,17 @@ interface ContentItem {
   order_index: number
 }
 
+interface CourseEbook {
+  id: string
+  course_id: string
+  title: string
+  storage_path: string
+  created_at: string
+}
+
 interface Props {
   course: { id: string; title: string; description: string }
+  courseEbooks: CourseEbook[]
   modules: Module[]
   subTopicsByModule: Record<string, SubTopic[]>
   contentByModule: Record<string, ContentItem[]>
@@ -39,6 +48,7 @@ interface Props {
 
 export default function StudentCourseClient({ 
   course, 
+  courseEbooks,
   modules, 
   subTopicsByModule,
   contentByModule, 
@@ -115,7 +125,7 @@ export default function StudentCourseClient({
     }
   }
 
-  async function handleDownload(storagePath: string, title: string) {
+  async function handleDownload(storagePath: string, title: string, contentId?: string) {
     const res = await fetch(`/api/download?path=${encodeURIComponent(storagePath)}`)
     if (!res.ok) { alert('Download failed. You may not have access to this file.'); return }
     const { url } = await res.json()
@@ -126,9 +136,8 @@ export default function StudentCourseClient({
       a.click()
       
       // Log download activity
-      const contentItem = resources.find(r => r.storage_path === storagePath)
-      if (contentItem) {
-        logActivity('downloaded_resource', contentItem.id, activeModule?.id, activeSubTopic?.id)
+      if (contentId) {
+        logActivity('downloaded_resource', contentId, activeModule?.id, activeSubTopic?.id)
       }
     }
   }
@@ -344,6 +353,48 @@ export default function StudentCourseClient({
             </div>
           ) : (
             <>
+              {courseEbooks.length > 0 && (
+                <div style={{ background: 'var(--white)', border: '1px solid var(--border)', borderRadius: 8, padding: '12px 16px' }}>
+                  <p style={{ fontSize: 12, fontWeight: 500, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>
+                    Course E-Books
+                  </p>
+                  {courseEbooks.map(ebook => (
+                    <div key={ebook.id} style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                      padding: '7px 0', borderBottom: '1px solid var(--border)'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <div style={{
+                          width: 28, height: 28, borderRadius: 4,
+                          background: '#fce7f3', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          fontSize: 10, fontWeight: 600, color: '#be185d'
+                        }}>
+                          PDF
+                        </div>
+                        <div>
+                          <p style={{ fontSize: 12, fontWeight: 500 }}>{ebook.title}</p>
+                          <p style={{ fontSize: 11, color: 'var(--muted)' }}>Available for the full course</p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => handleDownload(ebook.storage_path, ebook.title)}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 4,
+                          fontSize: 12, color: 'var(--teal)', cursor: 'pointer',
+                          padding: '5px 10px', borderRadius: 6, border: '1px solid #9FE1CB',
+                          background: 'transparent', fontFamily: "'DM Sans', sans-serif"
+                        }}
+                      >
+                        <svg width="12" height="12" viewBox="0 0 20 20" fill="currentColor">
+                          <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" />
+                        </svg>
+                        Download
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
               {/* Video player */}
               {activeVideo && videoUrls[activeVideo.id] ? (
                 <div style={{ background: '#0d1117', borderRadius: 10, overflow: 'hidden' }}>
@@ -460,7 +511,7 @@ export default function StudentCourseClient({
                           </div>
                         </div>
                         <button
-                          onClick={() => handleDownload(item.storage_path, item.title)}
+                          onClick={() => handleDownload(item.storage_path, item.title, item.id)}
                           style={{
                             display: 'flex', alignItems: 'center', gap: 4,
                             fontSize: 12, color: 'var(--teal)', cursor: 'pointer',

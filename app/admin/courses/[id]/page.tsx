@@ -20,6 +20,13 @@ interface Content {
   order_index: number
 }
 
+interface CourseEbook {
+  id: string
+  course_id: string
+  title: string
+  storage_path: string
+}
+
 export default function AdminCoursePage({ params }: { params: Promise<{ id: string }> }) {
   const { id: courseId } = use(params)
   const router = useRouter()
@@ -28,19 +35,23 @@ export default function AdminCoursePage({ params }: { params: Promise<{ id: stri
   const [courseName, setCourseName] = useState('')
   const [modules, setModules] = useState<Module[]>([])
   const [content, setContent] = useState<Record<string, Content[]>>({})
+  const [courseEbooks, setCourseEbooks] = useState<CourseEbook[]>([])
   const [loading, setLoading] = useState(true)
   const [newModTitle, setNewModTitle] = useState('')
   const [addingMod, setAddingMod] = useState(false)
   const [toggling, setToggling] = useState<string | null>(null)
   const [expanded, setExpanded] = useState<string | null>(null)
+  const [deletingEbook, setDeletingEbook] = useState<string | null>(null)
 
   async function load() {
-    const [{ data: course }, { data: mods }] = await Promise.all([
+    const [{ data: course }, { data: mods }, { data: ebooks }] = await Promise.all([
       supabase.from('courses').select('title').eq('id', courseId).single(),
       supabase.from('modules').select('*').eq('course_id', courseId).order('order_index'),
+      supabase.from('course_ebooks').select('*').eq('course_id', courseId).order('created_at'),
     ])
     setCourseName(course?.title || '')
     setModules(mods || [])
+    setCourseEbooks(ebooks || [])
 
     // load content for all modules
     if (mods && mods.length > 0) {
@@ -95,6 +106,15 @@ export default function AdminCoursePage({ params }: { params: Promise<{ id: stri
     load()
   }
 
+  async function deleteCourseEbook(ebook: CourseEbook) {
+    if (!confirm('Delete this course e-book?')) return
+    setDeletingEbook(ebook.id)
+    await supabase.storage.from('medfellow-content').remove([ebook.storage_path])
+    await supabase.from('course_ebooks').delete().eq('id', ebook.id)
+    setDeletingEbook(null)
+    load()
+  }
+
   const typeIcon = (type: string) => {
     if (type === 'video') return { bg: '#e0f2fe', color: '#0369a1', label: 'VID' }
     if (type === 'ppt') return { bg: '#fff3e0', color: '#e65100', label: 'PPT' }
@@ -119,7 +139,7 @@ export default function AdminCoursePage({ params }: { params: Promise<{ id: stri
           <h1 style={{ fontFamily: "'DM Serif Display', serif", fontSize: 22 }}>
             {loading ? '…' : courseName}
           </h1>
-          <p style={{ fontSize: 13, color: 'var(--muted)', marginTop: 2 }}>Module management & content</p>
+          <p style={{ fontSize: 13, color: 'var(--muted)', marginTop: 2 }}>Module management, content, and course e-books</p>
         </div>
       </div>
 
@@ -129,6 +149,69 @@ export default function AdminCoursePage({ params }: { params: Promise<{ id: stri
         <div style={{ display: 'flex', gap: 24 }}>
           {/* Modules list */}
           <div style={{ flex: 1 }}>
+            <div style={{
+              background: 'var(--white)', border: '1px solid var(--border)', borderRadius: 10,
+              padding: 16, marginBottom: 20
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 12 }}>
+                <div>
+                  <h4 style={{ fontSize: 13, fontWeight: 500 }}>Course E-Books</h4>
+                  <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 3 }}>
+                    Upload PDFs once per course. Students can access them without attaching them to a module.
+                  </p>
+                </div>
+                <button
+                  onClick={() => router.push(`/admin/courses/${courseId}/upload?scope=course-ebook`)}
+                  style={{
+                    padding: '8px 12px', fontSize: 12, background: '#fef3c7', color: '#92400e',
+                    border: '1px solid #fcd34d', borderRadius: 7, cursor: 'pointer',
+                    fontFamily: "'DM Sans', sans-serif"
+                  }}
+                >
+                  + Upload E-Book
+                </button>
+              </div>
+
+              {courseEbooks.length === 0 ? (
+                <p style={{ fontSize: 12, color: 'var(--muted)' }}>No course e-books uploaded yet.</p>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {courseEbooks.map(ebook => (
+                    <div key={ebook.id} style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                      padding: '10px 12px', border: '1px solid var(--border)', borderRadius: 8,
+                      background: '#fffdf8'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <div style={{
+                          width: 28, height: 28, borderRadius: 6, background: '#fce7f3', color: '#be185d',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          fontSize: 10, fontWeight: 700
+                        }}>
+                          PDF
+                        </div>
+                        <div>
+                          <p style={{ fontSize: 12, fontWeight: 500 }}>{ebook.title}</p>
+                          <p style={{ fontSize: 11, color: 'var(--muted)' }}>Course-level e-book</p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => deleteCourseEbook(ebook)}
+                        disabled={deletingEbook === ebook.id}
+                        style={{
+                          padding: '5px 10px', fontSize: 11, background: 'transparent',
+                          color: '#ef4444', border: '1px solid #fecaca', borderRadius: 6, cursor: 'pointer',
+                          fontFamily: "'DM Sans', sans-serif"
+                        }}
+                      >
+                        {deletingEbook === ebook.id ? '…' : 'Delete'}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
             {modules.length === 0 ? (
               <div style={{
                 background: 'var(--white)', border: '1px solid var(--border)', borderRadius: 10,
