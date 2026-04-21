@@ -2,12 +2,6 @@
 
 import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
-import dynamic from 'next/dynamic'
-
-// Dynamically import ReactPlayer to avoid SSR issues
-const ReactPlayer = dynamic(() => import('react-player'), { 
-  ssr: false 
-}) as any
 
 interface Module {
   id: string
@@ -183,7 +177,10 @@ export default function StudentCourseClient({
   }
 
   function seekTo(seconds: number) {
-    playerRef.current?.seekTo(seconds)
+    if (playerRef.current) {
+      playerRef.current.currentTime = seconds
+      playerRef.current.play()
+    }
   }
 
   function formatTime(seconds: number): string {
@@ -520,22 +517,31 @@ export default function StudentCourseClient({
                     aspectRatio: '16/9',
                     position: 'relative'
                   }}>
-                    <ReactPlayer
+                    <video
                       ref={playerRef}
                       key={activeVideo.id}
-                      url={videoUrls[activeVideo.id]}
+                      src={videoUrls[activeVideo.id]}
                       controls
-                      playbackRate={playbackRate}
-                      width="100%"
-                      height="100%"
-                      playing={false}
-                      onError={(e: any) => {
-                        console.error('ReactPlayer Error:', e)
-                        alert('Failed to load video. Please refresh the page or contact support.')
+                      controlsList="nodownload"
+                      style={{
+                        width: '100%',
+                        height: '100%',
+                        backgroundColor: '#000'
                       }}
-                      onProgress={(state: any) => {
-                        const currentTime = state.playedSeconds
-                        const duration = state.loadedSeconds
+                      onLoadedMetadata={(e: any) => {
+                        const video = e.target as HTMLVideoElement
+                        video.playbackRate = playbackRate
+                        
+                        // Resume from last position
+                        const savedTime = localStorage.getItem(`video_${activeVideo.id}`)
+                        if (savedTime && parseFloat(savedTime) > 5) {
+                          video.currentTime = parseFloat(savedTime)
+                        }
+                      }}
+                      onTimeUpdate={(e: any) => {
+                        const video = e.target as HTMLVideoElement
+                        const currentTime = video.currentTime
+                        const duration = video.duration
                         
                         // Save position for resume
                         if (Math.floor(currentTime) % 5 === 0) {
@@ -548,15 +554,8 @@ export default function StudentCourseClient({
                         }
                         
                         // Auto-mark as complete if watched 90%+
-                        if (state.played > 0.9) {
+                        if (currentTime / duration > 0.9) {
                           trackVideoProgress(activeVideo.id, currentTime, duration, true)
-                        }
-                      }}
-                      onReady={() => {
-                        // Resume from last position
-                        const savedTime = localStorage.getItem(`video_${activeVideo.id}`)
-                        if (savedTime && parseFloat(savedTime) > 5) {
-                          playerRef.current?.seekTo(parseFloat(savedTime))
                         }
                       }}
                       onEnded={() => {
@@ -568,7 +567,9 @@ export default function StudentCourseClient({
                       onPlay={() => {
                         logActivity('viewed_video', activeVideo.id, activeModule?.id, activeSubTopic?.id)
                       }}
-                      style={{ backgroundColor: '#000' }}
+                      onError={(e: any) => {
+                        console.error('Video Error:', e)
+                      }}
                     />
                   </div>
 
@@ -588,7 +589,12 @@ export default function StudentCourseClient({
                       {[0.5, 0.75, 1, 1.25, 1.5, 2].map(rate => (
                         <button
                           key={rate}
-                          onClick={() => setPlaybackRate(rate)}
+                          onClick={() => {
+                            setPlaybackRate(rate)
+                            if (playerRef.current) {
+                              playerRef.current.playbackRate = rate
+                            }
+                          }}
                           style={{
                             padding: '4px 10px',
                             fontSize: 11,
