@@ -519,7 +519,7 @@ export default function StudentCourseClient({
                       width="100%"
                       height="100%"
                       pip={true}
-                      onProgress={(state) => {
+                      onProgress={(state: any) => {
                         const currentTime = state.playedSeconds
                         const duration = state.loadedSeconds
                         
