@@ -1,7 +1,11 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
+import dynamic from 'next/dynamic'
+
+// Dynamically import ReactPlayer to avoid SSR issues
+const ReactPlayer = dynamic(() => import('react-player'), { ssr: false })
 
 interface Module {
   id: string
@@ -59,6 +63,11 @@ export default function StudentCourseClient({
   const [activeModule, setActiveModule] = useState<Module | null>(firstUnlocked || null)
   const [activeSubTopic, setActiveSubTopic] = useState<SubTopic | null>(null)
   const [expandedModules, setExpandedModules] = useState<Set<string>>(new Set())
+  const [playbackRate, setPlaybackRate] = useState(1)
+  const [showNotes, setShowNotes] = useState(false)
+  const [currentNote, setCurrentNote] = useState('')
+  const [videoNotes, setVideoNotes] = useState<any[]>([])
+  const [bookmarks, setBookmarks] = useState<any[]>([])
   const [activeVideo, setActiveVideo] = useState<ContentItem | null>(() => {
     if (!firstUnlocked) return null
     
@@ -77,6 +86,100 @@ export default function StudentCourseClient({
   })
 
   const unlockedCount = modules.filter(m => !m.is_locked).length
+  const playerRef = useRef<any>(null)
+
+  // Load notes and bookmarks when active video changes
+  useEffect(() => {
+    if (activeVideo) {
+      loadNotesAndBookmarks()
+    }
+  }, [activeVideo?.id])
+
+  async function loadNotesAndBookmarks() {
+    if (!activeVideo) return
+    try {
+      const [notesRes, bookmarksRes] = await Promise.all([
+        fetch(`/api/notes?content_id=${activeVideo.id}`),
+        fetch(`/api/bookmarks?content_id=${activeVideo.id}`)
+      ])
+      if (notesRes.ok) setVideoNotes(await notesRes.json())
+      if (bookmarksRes.ok) setBookmarks(await bookmarksRes.json())
+    } catch (error) {
+      console.error('Failed to load notes/bookmarks:', error)
+    }
+  }
+
+  async function saveNote() {
+    if (!activeVideo || !currentNote.trim()) return
+    const currentTime = playerRef.current?.getCurrentTime() || 0
+    try {
+      const res = await fetch('/api/notes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          content_id: activeVideo.id,
+          module_id: activeModule?.id,
+          course_id: course.id,
+          note_text: currentNote.trim(),
+          timestamp_seconds: Math.floor(currentTime)
+        })
+      })
+      if (res.ok) {
+        setCurrentNote('')
+        loadNotesAndBookmarks()
+      }
+    } catch (error) {
+      console.error('Failed to save note:', error)
+    }
+  }
+
+  async function addBookmark(title: string) {
+    if (!activeVideo) return
+    const currentTime = playerRef.current?.getCurrentTime() || 0
+    try {
+      const res = await fetch('/api/bookmarks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          content_id: activeVideo.id,
+          module_id: activeModule?.id,
+          title: title || `Bookmark at ${formatTime(currentTime)}`,
+          timestamp_seconds: Math.floor(currentTime)
+        })
+      })
+      if (res.ok) loadNotesAndBookmarks()
+    } catch (error) {
+      console.error('Failed to add bookmark:', error)
+    }
+  }
+
+  async function deleteNote(noteId: string) {
+    try {
+      await fetch(`/api/notes?id=${noteId}`, { method: 'DELETE' })
+      loadNotesAndBookmarks()
+    } catch (error) {
+      console.error('Failed to delete note:', error)
+    }
+  }
+
+  async function deleteBookmark(bookmarkId: string) {
+    try {
+      await fetch(`/api/bookmarks?id=${bookmarkId}`, { method: 'DELETE' })
+      loadNotesAndBookmarks()
+    } catch (error) {
+      console.error('Failed to delete bookmark:', error)
+    }
+  }
+
+  function seekTo(seconds: number) {
+    playerRef.current?.seekTo(seconds)
+  }
+
+  function formatTime(seconds: number): string {
+    const mins = Math.floor(seconds / 60)
+    const secs = Math.floor(seconds % 60)
+    return `${mins}:${secs.toString().padStart(2, '0')}`
+  }
 
   // Get current content based on active module/sub-topic
   let currentContent: ContentItem[] = []
@@ -397,39 +500,297 @@ export default function StudentCourseClient({
 
               {/* Video player */}
               {activeVideo && videoUrls[activeVideo.id] ? (
-                <div style={{ background: '#0d1117', borderRadius: 10, overflow: 'hidden' }}>
-                  <video
-                    key={activeVideo.id}
-                    src={videoUrls[activeVideo.id]}
-                    controls
-                    controlsList="nodownload nofullscreen"
-                    onContextMenu={e => e.preventDefault()}
-                    onTimeUpdate={(e) => {
-                      const video = e.currentTarget
-                      const currentTime = video.currentTime
-                      const duration = video.duration
+                <>
+                  <div style={{ 
+                    background: '#0d1117', 
+                    borderRadius: 10, 
+                    overflow: 'hidden',
+                    aspectRatio: '16/9',
+                    position: 'relative'
+                  }}>
+                    <ReactPlayer
+                      ref={playerRef}
+                      key={activeVideo.id}
+                      url={videoUrls[activeVideo.id]}
+                      controls
+                      playbackRate={playbackRate}
+                      width="100%"
+                      height="100%"
+                      pip={true}
+                      config={{
+                        file: {
+                          attributes: {
+                            controlsList: 'nodownload',
+                            onContextMenu: (e: any) => e.preventDefault(),
+                          },
+                        },
+                      }}
+                      onProgress={(state) => {
+                        const currentTime = state.playedSeconds
+                        const duration = state.loadedSeconds
+                        
+                        // Save position for resume
+                        if (Math.floor(currentTime) % 5 === 0) {
+                          localStorage.setItem(`video_${activeVideo.id}`, currentTime.toString())
+                        }
+                        
+                        // Track progress every 10 seconds
+                        if (Math.floor(currentTime) % 10 === 0 && currentTime > 0) {
+                          trackVideoProgress(activeVideo.id, currentTime, duration, false)
+                        }
+                        
+                        // Auto-mark as complete if watched 90%+
+                        if (state.played > 0.9) {
+                          trackVideoProgress(activeVideo.id, currentTime, duration, true)
+                        }
+                      }}
+                      onReady={() => {
+                        // Resume from last position
+                        const savedTime = localStorage.getItem(`video_${activeVideo.id}`)
+                        if (savedTime && parseFloat(savedTime) > 5) {
+                          playerRef.current?.seekTo(parseFloat(savedTime))
+                        }
+                      }}
+                      onEnded={() => {
+                        if (activeVideo) {
+                          trackVideoProgress(activeVideo.id, 0, 0, true)
+                          localStorage.removeItem(`video_${activeVideo.id}`)
+                        }
+                      }}
+                      onPlay={() => {
+                        logActivity('viewed_video', activeVideo.id, activeModule?.id, activeSubTopic?.id)
+                      }}
+                      style={{ backgroundColor: '#000' }}
+                    />
+                  </div>
+
+                  {/* Video Controls */}
+                  <div style={{
+                    background: 'var(--white)',
+                    border: '1px solid var(--border)',
+                    borderRadius: 8,
+                    padding: '12px 16px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 16,
+                    flexWrap: 'wrap'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontSize: 12, color: 'var(--muted)' }}>Speed:</span>
+                      {[0.5, 0.75, 1, 1.25, 1.5, 2].map(rate => (
+                        <button
+                          key={rate}
+                          onClick={() => setPlaybackRate(rate)}
+                          style={{
+                            padding: '4px 10px',
+                            fontSize: 11,
+                            background: playbackRate === rate ? 'var(--teal)' : 'var(--bg)',
+                            color: playbackRate === rate ? 'white' : 'var(--text)',
+                            border: `1px solid ${playbackRate === rate ? 'var(--teal)' : 'var(--border)'}`,
+                            borderRadius: 5,
+                            cursor: 'pointer',
+                            fontFamily: "'DM Sans', sans-serif",
+                          }}
+                        >
+                          {rate}x
+                        </button>
+                      ))}
+                    </div>
+                    <div style={{ height: 20, width: 1, background: 'var(--border)' }} />
+                    <button
+                      onClick={() => setShowNotes(!showNotes)}
+                      style={{
+                        padding: '5px 12px',
+                        fontSize: 12,
+                        background: showNotes ? 'var(--teal-light)' : 'var(--bg)',
+                        color: showNotes ? 'var(--teal)' : 'var(--text)',
+                        border: `1px solid ${showNotes ? 'var(--teal)' : 'var(--border)'}`,
+                        borderRadius: 6,
+                        cursor: 'pointer',
+                        fontFamily: "'DM Sans', sans-serif",
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6
+                      }}
+                    >
+                      📝 Notes ({videoNotes.length})
+                    </button>
+                    <button
+                      onClick={() => {
+                        const title = prompt('Bookmark name:')
+                        if (title) addBookmark(title)
+                      }}
+                      style={{
+                        padding: '5px 12px',
+                        fontSize: 12,
+                        background: 'var(--bg)',
+                        color: 'var(--text)',
+                        border: '1px solid var(--border)',
+                        borderRadius: 6,
+                        cursor: 'pointer',
+                        fontFamily: "'DM Sans', sans-serif",
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6
+                      }}
+                    >
+                      🔖 Add Bookmark
+                    </button>
+                  </div>
+
+                  {/* Notes Section */}
+                  {showNotes && (
+                    <div style={{
+                      background: 'var(--white)',
+                      border: '1px solid var(--border)',
+                      borderRadius: 8,
+                      padding: 16
+                    }}>
+                      <h4 style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>Video Notes</h4>
                       
-                      // Track progress every 10 seconds
-                      if (Math.floor(currentTime) % 10 === 0) {
-                        trackVideoProgress(activeVideo.id, currentTime, duration, false)
-                      }
-                      
-                      // Auto-mark as complete if watched 90%+
-                      if (currentTime / duration > 0.9) {
-                        trackVideoProgress(activeVideo.id, currentTime, duration, true)
-                      }
-                    }}
-                    onEnded={() => {
-                      if (activeVideo) {
-                        trackVideoProgress(activeVideo.id, activeVideo.id.length, activeVideo.id.length, true)
-                      }
-                    }}
-                    onPlay={() => {
-                      logActivity('viewed_video', activeVideo.id, activeModule?.id, activeSubTopic?.id)
-                    }}
-                    style={{ width: '100%', display: 'block', maxHeight: '60vh' }}
-                  />
-                </div>
+                      {/* Add Note */}
+                      <div style={{ marginBottom: 16 }}>
+                        <textarea
+                          value={currentNote}
+                          onChange={(e) => setCurrentNote(e.target.value)}
+                          placeholder="Take a note at current timestamp..."
+                          style={{
+                            width: '100%',
+                            minHeight: 60,
+                            padding: 10,
+                            fontSize: 12,
+                            border: '1px solid var(--border)',
+                            borderRadius: 6,
+                            fontFamily: "'DM Sans', sans-serif",
+                            resize: 'vertical'
+                          }}
+                        />
+                        <button
+                          onClick={saveNote}
+                          disabled={!currentNote.trim()}
+                          style={{
+                            marginTop: 8,
+                            padding: '6px 16px',
+                            fontSize: 12,
+                            background: 'var(--teal)',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: 6,
+                            cursor: currentNote.trim() ? 'pointer' : 'not-allowed',
+                            opacity: currentNote.trim() ? 1 : 0.5,
+                            fontFamily: "'DM Sans', sans-serif"
+                          }}
+                        >
+                          Save Note
+                        </button>
+                      </div>
+
+                      {/* Notes List */}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                        {videoNotes.length === 0 ? (
+                          <p style={{ fontSize: 12, color: 'var(--muted)', textAlign: 'center', padding: 20 }}>
+                            No notes yet. Take your first note!
+                          </p>
+                        ) : (
+                          videoNotes.map((note: any) => (
+                            <div
+                              key={note.id}
+                              style={{
+                                padding: 10,
+                                background: 'var(--bg)',
+                                border: '1px solid var(--border)',
+                                borderRadius: 6
+                              }}
+                            >
+                              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                                <button
+                                  onClick={() => seekTo(note.timestamp_seconds)}
+                                  style={{
+                                    fontSize: 11,
+                                    color: 'var(--teal)',
+                                    background: 'transparent',
+                                    border: 'none',
+                                    cursor: 'pointer',
+                                    padding: 0,
+                                    fontWeight: 500
+                                  }}
+                                >
+                                  ⏱ {formatTime(note.timestamp_seconds)}
+                                </button>
+                                <button
+                                  onClick={() => deleteNote(note.id)}
+                                  style={{
+                                    fontSize: 11,
+                                    color: '#ef4444',
+                                    background: 'transparent',
+                                    border: 'none',
+                                    cursor: 'pointer',
+                                    padding: 0
+                                  }}
+                                >
+                                  Delete
+                                </button>
+                              </div>
+                              <p style={{ fontSize: 12, lineHeight: 1.5 }}>{note.note_text}</p>
+                            </div>
+                          ))
+                        )}
+                      </div>
+
+                      {/* Bookmarks */}
+                      {bookmarks.length > 0 && (
+                        <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--border)' }}>
+                          <h5 style={{ fontSize: 12, fontWeight: 600, marginBottom: 10 }}>🔖 Bookmarks</h5>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                            {bookmarks.map((bookmark: any) => (
+                              <div
+                                key={bookmark.id}
+                                style={{
+                                  padding: '6px 10px',
+                                  background: 'var(--bg)',
+                                  border: '1px solid var(--border)',
+                                  borderRadius: 5,
+                                  display: 'flex',
+                                  justifyContent: 'space-between',
+                                  alignItems: 'center'
+                                }}
+                              >
+                                <button
+                                  onClick={() => seekTo(bookmark.timestamp_seconds)}
+                                  style={{
+                                    fontSize: 11,
+                                    color: 'var(--teal)',
+                                    background: 'transparent',
+                                    border: 'none',
+                                    cursor: 'pointer',
+                                    padding: 0,
+                                    textAlign: 'left',
+                                    flex: 1
+                                  }}
+                                >
+                                  {bookmark.title} - {formatTime(bookmark.timestamp_seconds)}
+                                </button>
+                                <button
+                                  onClick={() => deleteBookmark(bookmark.id)}
+                                  style={{
+                                    fontSize: 11,
+                                    color: '#ef4444',
+                                    background: 'transparent',
+                                    border: 'none',
+                                    cursor: 'pointer',
+                                    padding: 0
+                                  }}
+                                >
+                                  ×
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </>
               ) : videos.length === 0 ? (
                 <div style={{
                   background: '#0d1117', borderRadius: 10, aspectRatio: '16/9',

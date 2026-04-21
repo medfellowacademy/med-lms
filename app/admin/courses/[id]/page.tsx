@@ -3,6 +3,7 @@
 import { useEffect, useState, use } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
+import PreviewModal from '@/components/PreviewModal'
 
 interface Module {
   id: string
@@ -42,6 +43,17 @@ export default function AdminCoursePage({ params }: { params: Promise<{ id: stri
   const [toggling, setToggling] = useState<string | null>(null)
   const [expanded, setExpanded] = useState<string | null>(null)
   const [deletingEbook, setDeletingEbook] = useState<string | null>(null)
+  const [previewModal, setPreviewModal] = useState<{
+    isOpen: boolean
+    title: string
+    type: 'video' | 'ppt' | 'pdf'
+    url: string
+  }>({
+    isOpen: false,
+    title: '',
+    type: 'video',
+    url: '',
+  })
 
   async function load() {
     const [{ data: course }, { data: mods }, { data: ebooks }] = await Promise.all([
@@ -104,6 +116,41 @@ export default function AdminCoursePage({ params }: { params: Promise<{ id: stri
   async function deleteContent(id: string) {
     await supabase.from('module_content').delete().eq('id', id)
     load()
+  }
+
+  async function previewContent(item: Content) {
+    // Get signed URL from Supabase storage
+    const { data } = await supabase.storage
+      .from('medfellow-content')
+      .createSignedUrl(item.storage_path, 3600) // 1 hour expiry
+
+    if (data?.signedUrl) {
+      setPreviewModal({
+        isOpen: true,
+        title: item.title,
+        type: item.type,
+        url: data.signedUrl,
+      })
+    } else {
+      alert('Failed to load preview URL')
+    }
+  }
+
+  async function previewEbook(ebook: CourseEbook) {
+    const { data } = await supabase.storage
+      .from('medfellow-content')
+      .createSignedUrl(ebook.storage_path, 3600)
+
+    if (data?.signedUrl) {
+      setPreviewModal({
+        isOpen: true,
+        title: ebook.title,
+        type: 'pdf',
+        url: data.signedUrl,
+      })
+    } else {
+      alert('Failed to load preview URL')
+    }
   }
 
   async function deleteCourseEbook(ebook: CourseEbook) {
@@ -195,17 +242,34 @@ export default function AdminCoursePage({ params }: { params: Promise<{ id: stri
                           <p style={{ fontSize: 11, color: 'var(--muted)' }}>Course-level e-book</p>
                         </div>
                       </div>
-                      <button
-                        onClick={() => deleteCourseEbook(ebook)}
-                        disabled={deletingEbook === ebook.id}
-                        style={{
-                          padding: '5px 10px', fontSize: 11, background: 'transparent',
-                          color: '#ef4444', border: '1px solid #fecaca', borderRadius: 6, cursor: 'pointer',
-                          fontFamily: "'DM Sans', sans-serif"
-                        }}
-                      >
-                        {deletingEbook === ebook.id ? '…' : 'Delete'}
-                      </button>
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                        <button
+                          onClick={() => previewEbook(ebook)}
+                          style={{
+                            padding: '5px 12px',
+                            fontSize: 11,
+                            background: 'var(--teal-light)',
+                            color: 'var(--teal)',
+                            border: '1px solid #9FE1CB',
+                            borderRadius: 6,
+                            cursor: 'pointer',
+                            fontFamily: "'DM Sans', sans-serif",
+                          }}
+                        >
+                          👁 Preview
+                        </button>
+                        <button
+                          onClick={() => deleteCourseEbook(ebook)}
+                          disabled={deletingEbook === ebook.id}
+                          style={{
+                            padding: '5px 10px', fontSize: 11, background: 'transparent',
+                            color: '#ef4444', border: '1px solid #fecaca', borderRadius: 6, cursor: 'pointer',
+                            fontFamily: "'DM Sans', sans-serif"
+                          }}
+                        >
+                          {deletingEbook === ebook.id ? '…' : 'Delete'}
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -337,15 +401,32 @@ export default function AdminCoursePage({ params }: { params: Promise<{ id: stri
                                     </div>
                                     <span style={{ fontSize: 12 }}>{item.title}</span>
                                   </div>
-                                  <button
-                                    onClick={() => deleteContent(item.id)}
-                                    style={{
-                                      fontSize: 11, color: '#ef4444', background: 'transparent',
-                                      border: 'none', cursor: 'pointer', padding: '2px 6px'
-                                    }}
-                                  >
-                                    Remove
-                                  </button>
+                                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                                    <button
+                                      onClick={() => previewContent(item)}
+                                      style={{
+                                        fontSize: 11,
+                                        color: 'var(--teal)',
+                                        background: 'transparent',
+                                        border: '1px solid #9FE1CB',
+                                        cursor: 'pointer',
+                                        padding: '4px 10px',
+                                        borderRadius: 5,
+                                        fontFamily: "'DM Sans', sans-serif",
+                                      }}
+                                    >
+                                      👁 Preview
+                                    </button>
+                                    <button
+                                      onClick={() => deleteContent(item.id)}
+                                      style={{
+                                        fontSize: 11, color: '#ef4444', background: 'transparent',
+                                        border: 'none', cursor: 'pointer', padding: '2px 6px'
+                                      }}
+                                    >
+                                      Remove
+                                    </button>
+                                  </div>
                                 </div>
                               )
                             })
@@ -390,6 +471,15 @@ export default function AdminCoursePage({ params }: { params: Promise<{ id: stri
           </div>
         </div>
       )}
+
+      {/* Preview Modal */}
+      <PreviewModal
+        isOpen={previewModal.isOpen}
+        onClose={() => setPreviewModal({ ...previewModal, isOpen: false })}
+        title={previewModal.title}
+        type={previewModal.type}
+        url={previewModal.url}
+      />
     </div>
   )
 }

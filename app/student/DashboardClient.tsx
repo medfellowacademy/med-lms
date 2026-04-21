@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import ProgressDashboard from '@/components/ProgressDashboard'
 
 interface CourseStats {
   id: string
@@ -39,7 +40,7 @@ interface Props {
 }
 
 export default function DashboardClient({ profile, courseStats, recentActivity, overallStats }: Props) {
-  const [activeTab, setActiveTab] = useState<'overview' | 'activity'>('overview')
+  const [activeTab, setActiveTab] = useState<'overview' | 'activity' | 'progress'>('overview')
 
   const getActivityIcon = (type: string) => {
     switch (type) {
@@ -167,6 +168,22 @@ export default function DashboardClient({ profile, courseStats, recentActivity, 
             My Courses
           </button>
           <button
+            onClick={() => setActiveTab('progress')}
+            style={{
+              padding: '12px 0',
+              fontSize: 14,
+              fontWeight: 500,
+              border: 'none',
+              background: 'none',
+              color: activeTab === 'progress' ? 'var(--teal)' : 'var(--muted)',
+              borderBottom: `2px solid ${activeTab === 'progress' ? 'var(--teal)' : 'transparent'}`,
+              cursor: 'pointer',
+              fontFamily: "'DM Sans', sans-serif"
+            }}
+          >
+            Progress & Achievements
+          </button>
+          <button
             onClick={() => setActiveTab('activity')}
             style={{
               padding: '12px 0',
@@ -186,7 +203,9 @@ export default function DashboardClient({ profile, courseStats, recentActivity, 
       </div>
 
       {/* Tab Content */}
-      {activeTab === 'overview' ? (
+      {activeTab === 'progress' ? (
+        <ProgressDashboard />
+      ) : activeTab === 'overview' ? (
         <div>
           {courseStats.length === 0 ? (
             <div style={{
