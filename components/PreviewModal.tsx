@@ -4,7 +4,7 @@ import { useEffect } from 'react'
 import dynamic from 'next/dynamic'
 
 // Dynamically import ReactPlayer to avoid SSR issues
-const ReactPlayer = dynamic(() => import('react-player'), { ssr: false })
+const ReactPlayer = dynamic(() => import('react-player'), { ssr: false }) as any
 
 interface PreviewModalProps {
   isOpen: boolean
@@ -120,14 +120,6 @@ export default function PreviewModal({ isOpen, onClose, title, type, url }: Prev
                 controls
                 width="100%"
                 height="100%"
-                config={{
-                  file: {
-                    attributes: {
-                      controlsList: 'nodownload',
-                      onContextMenu: (e: any) => e.preventDefault(),
-                    },
-                  },
-                }}
                 style={{ backgroundColor: '#000' }}
               />
             </div>
