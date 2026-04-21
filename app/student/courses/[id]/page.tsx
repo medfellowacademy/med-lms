@@ -90,11 +90,11 @@ export default async function StudentCoursePage({ params }: { params: Promise<{ 
     }
   }
 
-  // Generate signed URLs for videos in module content
+  // Generate signed URLs for videos in module content (use service role for access)
   for (const items of Object.values(contentByModule)) {
     for (const item of items) {
       if (item.type === 'video') {
-        const { data } = await supabase.storage
+        const { data } = await serviceSupabase.storage
           .from('medfellow-content')
           .createSignedUrl(item.storage_path, 4 * 60 * 60)
         if (data?.signedUrl) videoUrls[item.id] = data.signedUrl
@@ -102,11 +102,11 @@ export default async function StudentCoursePage({ params }: { params: Promise<{ 
     }
   }
 
-  // Generate signed URLs for videos in sub-topic content
+  // Generate signed URLs for videos in sub-topic content (use service role for access)
   for (const items of Object.values(contentBySubTopic)) {
     for (const item of items) {
       if (item.type === 'video') {
-        const { data } = await supabase.storage
+        const { data } = await serviceSupabase.storage
           .from('medfellow-content')
           .createSignedUrl(item.storage_path, 4 * 60 * 60)
         if (data?.signedUrl) videoUrls[item.id] = data.signedUrl
