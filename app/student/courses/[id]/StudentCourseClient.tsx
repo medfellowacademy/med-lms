@@ -517,14 +517,6 @@ export default function StudentCourseClient({
                       width="100%"
                       height="100%"
                       pip={true}
-                      config={{
-                        file: {
-                          attributes: {
-                            controlsList: 'nodownload',
-                            onContextMenu: (e: any) => e.preventDefault(),
-                          },
-                        },
-                      }}
                       onProgress={(state) => {
                         const currentTime = state.playedSeconds
                         const duration = state.loadedSeconds
