@@ -90,6 +90,15 @@ export default function StudentCourseClient({
   const unlockedCount = modules.filter(m => !m.is_locked).length
   const playerRef = useRef<any>(null)
 
+  // Debug: Log video URLs
+  useEffect(() => {
+    console.log('Video URLs:', videoUrls)
+    console.log('Active Video:', activeVideo)
+    if (activeVideo) {
+      console.log('Active Video URL:', videoUrls[activeVideo.id])
+    }
+  }, [activeVideo, videoUrls])
+
   // Load notes and bookmarks when active video changes
   useEffect(() => {
     if (activeVideo) {
@@ -501,7 +510,8 @@ export default function StudentCourseClient({
               )}
 
               {/* Video player */}
-              {activeVideo && videoUrls[activeVideo.id] ? (
+              {activeVideo ? (
+                videoUrls[activeVideo.id] ? (
                 <>
                   <div style={{ 
                     background: '#0d1117', 
@@ -518,7 +528,7 @@ export default function StudentCourseClient({
                       playbackRate={playbackRate}
                       width="100%"
                       height="100%"
-                      pip={true}
+                      playing={false}
                       onProgress={(state: any) => {
                         const currentTime = state.playedSeconds
                         const duration = state.loadedSeconds
@@ -785,6 +795,22 @@ export default function StudentCourseClient({
                     </div>
                   )}
                 </>
+              ) : (
+                <div style={{
+                  background: '#0d1117', borderRadius: 10, aspectRatio: '16/9',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  color: 'white', padding: 40, textAlign: 'center'
+                }}>
+                  <div>
+                    <div style={{ fontSize: 48, marginBottom: 16 }}>🎥</div>
+                    <div style={{ fontSize: 16, marginBottom: 8 }}>Video not available</div>
+                    <div style={{ fontSize: 12, color: '#888' }}>
+                      This video is being processed or the URL could not be generated.
+                      <br />Please refresh the page or contact support.
+                    </div>
+                  </div>
+                </div>
+              )
               ) : videos.length === 0 ? (
                 <div style={{
                   background: '#0d1117', borderRadius: 10, aspectRatio: '16/9',

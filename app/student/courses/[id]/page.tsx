@@ -94,10 +94,18 @@ export default async function StudentCoursePage({ params }: { params: Promise<{ 
   for (const items of Object.values(contentByModule)) {
     for (const item of items) {
       if (item.type === 'video') {
-        const { data } = await serviceSupabase.storage
+        const { data, error } = await serviceSupabase.storage
           .from('medfellow-content')
           .createSignedUrl(item.storage_path, 4 * 60 * 60)
-        if (data?.signedUrl) videoUrls[item.id] = data.signedUrl
+        if (error) {
+          console.error(`Failed to create signed URL for ${item.storage_path}:`, error)
+        }
+        if (data?.signedUrl) {
+          videoUrls[item.id] = data.signedUrl
+          console.log(`Created signed URL for video ${item.id}: ${item.title}`)
+        } else {
+          console.error(`No signed URL returned for ${item.id}: ${item.title}`)
+        }
       }
     }
   }
@@ -106,13 +114,23 @@ export default async function StudentCoursePage({ params }: { params: Promise<{ 
   for (const items of Object.values(contentBySubTopic)) {
     for (const item of items) {
       if (item.type === 'video') {
-        const { data } = await serviceSupabase.storage
+        const { data, error } = await serviceSupabase.storage
           .from('medfellow-content')
           .createSignedUrl(item.storage_path, 4 * 60 * 60)
-        if (data?.signedUrl) videoUrls[item.id] = data.signedUrl
+        if (error) {
+          console.error(`Failed to create signed URL for ${item.storage_path}:`, error)
+        }
+        if (data?.signedUrl) {
+          videoUrls[item.id] = data.signedUrl
+          console.log(`Created signed URL for video ${item.id}: ${item.title}`)
+        } else {
+          console.error(`No signed URL returned for ${item.id}: ${item.title}`)
+        }
       }
     }
   }
+
+  console.log('Total video URLs generated:', Object.keys(videoUrls).length)
 
   return (
     <StudentCourseClient
