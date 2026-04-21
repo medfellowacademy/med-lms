@@ -529,6 +529,10 @@ export default function StudentCourseClient({
                       width="100%"
                       height="100%"
                       playing={false}
+                      onError={(e: any) => {
+                        console.error('ReactPlayer Error:', e)
+                        alert('Failed to load video. Please refresh the page or contact support.')
+                      }}
                       onProgress={(state: any) => {
                         const currentTime = state.playedSeconds
                         const duration = state.loadedSeconds
