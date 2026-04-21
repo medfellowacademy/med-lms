@@ -3,9 +3,12 @@
 import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
+import type ReactPlayerType from 'react-player'
 
 // Dynamically import ReactPlayer to avoid SSR issues
-const ReactPlayer = dynamic(() => import('react-player'), { ssr: false })
+const ReactPlayer = dynamic(() => import('react-player'), { 
+  ssr: false 
+}) as unknown as typeof ReactPlayerType
 
 interface Module {
   id: string
