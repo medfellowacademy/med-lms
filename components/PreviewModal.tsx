@@ -10,7 +10,7 @@ interface PreviewModalProps {
   isOpen: boolean
   onClose: () => void
   title: string
-  type: 'video' | 'ppt' | 'pdf'
+  type: 'video' | 'audio' | 'ppt' | 'pdf' | 'document'
   url: string
 }
 
@@ -55,7 +55,7 @@ export default function PreviewModal({ isOpen, onClose, title, type, url }: Prev
         style={{
           background: 'var(--white)',
           borderRadius: 12,
-          maxWidth: type === 'video' ? 1200 : 900,
+          maxWidth: type === 'video' ? 1200 : type === 'audio' ? 700 : 900,
           width: '100%',
           maxHeight: '90vh',
           display: 'flex',
@@ -77,7 +77,11 @@ export default function PreviewModal({ isOpen, onClose, title, type, url }: Prev
           <div>
             <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 4 }}>{title}</h3>
             <p style={{ fontSize: 12, color: 'var(--muted)' }}>
-              {type === 'video' ? 'Video Preview' : type === 'ppt' ? 'Presentation Preview' : 'PDF Preview'}
+              {type === 'video' ? '🎬 Video Preview' : 
+               type === 'audio' ? '🎵 Audio Preview' :
+               type === 'ppt' ? '📊 Presentation Preview' : 
+               type === 'document' ? '📝 Document Preview' :
+               '📄 PDF Preview'}
             </p>
           </div>
           <button
@@ -123,41 +127,33 @@ export default function PreviewModal({ isOpen, onClose, title, type, url }: Prev
                 style={{ backgroundColor: '#000' }}
               />
             </div>
-          ) : type === 'pdf' ? (
-            <iframe
-              src={url}
-              style={{
-                width: '100%',
-                height: '70vh',
-                border: '1px solid var(--border)',
-                borderRadius: 8,
-              }}
-              title={title}
-            />
-          ) : (
-            // PPT preview using iframe (may not work for all PPT files)
-            <div style={{ textAlign: 'center', padding: 40 }}>
+          ) : type === 'audio' ? (
+            <div style={{ width: '100%', maxWidth: 600, padding: 40, textAlign: 'center' }}>
               <div
                 style={{
-                  width: 64,
-                  height: 64,
+                  width: 80,
+                  height: 80,
                   borderRadius: '50%',
-                  background: '#fff3e0',
-                  color: '#e65100',
+                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
                   display: 'inline-flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  fontSize: 24,
-                  fontWeight: 600,
-                  marginBottom: 16,
+                  fontSize: 32,
+                  marginBottom: 24,
                 }}
               >
-                PPT
+                🎵
               </div>
-              <h4 style={{ fontSize: 15, fontWeight: 500, marginBottom: 8 }}>Presentation File</h4>
-              <p style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 20 }}>
-                Preview not available for PowerPoint files
-              </p>
+              <h4 style={{ fontSize: 16, fontWeight: 600, marginBottom: 24 }}>Audio Player</h4>
+              <audio
+                controls
+                src={url}
+                style={{
+                  width: '100%',
+                  outline: 'none',
+                  marginBottom: 20,
+                }}
+              />
               <a
                 href={url}
                 download={title}
@@ -181,9 +177,43 @@ export default function PreviewModal({ isOpen, onClose, title, type, url }: Prev
                     clipRule="evenodd"
                   />
                 </svg>
-                Download to View
+                Download Audio
               </a>
             </div>
+          ) : type === 'pdf' ? (
+            <iframe
+              src={url}
+              style={{
+                width: '100%',
+                height: '70vh',
+                border: '1px solid var(--border)',
+                borderRadius: 8,
+              }}
+              title={title}
+            />
+          ) : type === 'document' ? (
+            <iframe
+              src={`https://docs.google.com/viewer?url=${encodeURIComponent(url)}&embedded=true`}
+              style={{
+                width: '100%',
+                height: '70vh',
+                border: '1px solid var(--border)',
+                borderRadius: 8,
+              }}
+              title={title}
+            />
+          ) : (
+            // PPT preview using Google Docs Viewer
+            <iframe
+              src={`https://docs.google.com/viewer?url=${encodeURIComponent(url)}&embedded=true`}
+              style={{
+                width: '100%',
+                height: '70vh',
+                border: '1px solid var(--border)',
+                borderRadius: 8,
+              }}
+              title={title}
+            />
           )}
         </div>
 

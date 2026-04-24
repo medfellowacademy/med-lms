@@ -38,7 +38,8 @@ export default function DiscussionsPage({ params }: { params: Promise<{ id: stri
 
   useEffect(() => {
     loadThreads()
-    subscribeToThreads()
+    const unsubscribe = subscribeToThreads()
+    return () => unsubscribe()
   }, [courseId])
 
   useEffect(() => {

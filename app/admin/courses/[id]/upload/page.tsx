@@ -29,7 +29,7 @@ export default function UploadPage({ params }: { params: Promise<{ id: string }>
   const [uploadTarget, setUploadTarget] = useState<'module' | 'course-ebook'>(preselectedScope)
   const [selectedModule, setSelectedModule] = useState(preselectedModule)
   const [selectedSubTopic, setSelectedSubTopic] = useState(preselectedSubTopic)
-  const [contentType, setContentType] = useState<'video' | 'ppt' | 'pdf'>(preselectedScope === 'course-ebook' ? 'pdf' : 'video')
+  const [contentType, setContentType] = useState<'video' | 'ppt' | 'pdf' | 'audio' | 'document'>(preselectedScope === 'course-ebook' ? 'pdf' : 'video')
   const [contentTitle, setContentTitle] = useState('')
   const [file, setFile] = useState<File | null>(null)
   const [uploading, setUploading] = useState(false)
@@ -79,12 +79,16 @@ export default function UploadPage({ params }: { params: Promise<{ id: string }>
     video: 'video/*',
     ppt: '.ppt,.pptx,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation',
     pdf: 'application/pdf',
+    audio: 'audio/*',
+    document: '.doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   }
 
   const folderMap = {
     video: 'videos',
     ppt: 'ppts',
     pdf: 'pdfs',
+    audio: 'audios',
+    document: 'documents',
   }
 
   // File size limits (in bytes)
@@ -92,9 +96,11 @@ export default function UploadPage({ params }: { params: Promise<{ id: string }>
     video: 1024 * 1024 * 1024, // 1GB (1024MB) for videos
     ppt: 100 * 1024 * 1024,    // 100MB for presentations
     pdf: 50 * 1024 * 1024,     // 50MB for PDFs
+    audio: 100 * 1024 * 1024,  // 100MB for audio
+    document: 50 * 1024 * 1024, // 50MB for documents
   }
 
-  function validateFile(file: File, type: 'video' | 'ppt' | 'pdf'): string | null {
+  function validateFile(file: File, type: 'video' | 'ppt' | 'pdf' | 'audio' | 'document'): string | null {
     // Check file size
     if (file.size > MAX_FILE_SIZE[type]) {
       const maxMB = MAX_FILE_SIZE[type] / 1024 / 1024
@@ -103,12 +109,18 @@ export default function UploadPage({ params }: { params: Promise<{ id: string }>
 
     // Check file type
     const validTypes = {
-      video: ['video/mp4', 'video/quicktime', 'video/x-msvideo', 'video/avi'],
+      video: ['video/mp4', 'video/quicktime', 'video/x-msvideo', 'video/avi', 'video/webm'],
       ppt: [
         'application/vnd.ms-powerpoint',
         'application/vnd.openxmlformats-officedocument.presentationml.presentation'
       ],
       pdf: ['application/pdf'],
+      audio: ['audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/ogg', 'audio/mp4', 'audio/x-m4a'],
+      document: [
+        'application/msword',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'text/plain'
+      ],
     }
 
     if (!validTypes[type].includes(file.type)) {
@@ -153,6 +165,10 @@ export default function UploadPage({ params }: { params: Promise<{ id: string }>
     }
 
     setProgress(80)
+    
+    // Get current user
+    const { data: { user } } = await supabase.auth.getUser()
+    
     let dbError: { message: string } | null = null
 
     if (uploadTarget === 'course-ebook') {
@@ -160,6 +176,10 @@ export default function UploadPage({ params }: { params: Promise<{ id: string }>
         course_id: courseId,
         title: contentTitle.trim(),
         storage_path: storagePath,
+        approval_status: 'pending',
+        uploaded_by: user?.id,
+        file_size: file.size,
+        mime_type: file.type,
       })
       dbError = error
     } else {
@@ -169,6 +189,10 @@ export default function UploadPage({ params }: { params: Promise<{ id: string }>
         title: contentTitle.trim(),
         storage_path: storagePath,
         order_index: 0,
+        approval_status: 'pending',
+        uploaded_by: user?.id,
+        file_size: file.size,
+        mime_type: file.type,
       }
 
       if (selectedSubTopic) {
@@ -314,14 +338,14 @@ export default function UploadPage({ params }: { params: Promise<{ id: string }>
           {uploadTarget === 'module' ? (
             <div style={{ marginBottom: 16 }}>
               <label style={{ display: 'block', fontSize: 12, fontWeight: 500, marginBottom: 8 }}>Content Type *</label>
-              <div style={{ display: 'flex', gap: 10 }}>
-                {(['video', 'ppt', 'pdf'] as const).map(type => (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 10 }}>
+                {(['video', 'audio', 'ppt', 'pdf', 'document'] as const).map(type => (
                   <button
                     key={type}
                     type="button"
                     onClick={() => setContentType(type)}
                     style={{
-                      flex: 1, padding: '9px 0', fontSize: 13, fontWeight: contentType === type ? 500 : 400,
+                      padding: '9px 4px', fontSize: 11, fontWeight: contentType === type ? 600 : 400,
                       background: contentType === type ? 'var(--teal-light)' : 'var(--bg)',
                       color: contentType === type ? 'var(--teal)' : 'var(--muted)',
                       border: `1px solid ${contentType === type ? '#9FE1CB' : 'var(--border)'}`,
@@ -329,10 +353,17 @@ export default function UploadPage({ params }: { params: Promise<{ id: string }>
                       fontFamily: "'DM Sans', sans-serif"
                     }}
                   >
-                    {type}
+                    {type === 'ppt' ? 'PPT' : type === 'pdf' ? 'PDF' : type}
                   </button>
                 ))}
               </div>
+              <p style={{ fontSize: 11, color: 'var(--muted)', marginTop: 6 }}>
+                {contentType === 'audio' && '🎵 Lectures, podcasts, or audio recordings'}
+                {contentType === 'document' && '📝 Word documents, text files, or study notes'}
+                {contentType === 'video' && '🎬 Video lectures or demonstrations'}
+                {contentType === 'ppt' && '📊 PowerPoint presentations'}
+                {contentType === 'pdf' && '📄 PDF documents or handouts'}
+              </p>
             </div>
           ) : (
             <div style={{

@@ -57,7 +57,8 @@ export default function QuestionDetailPage({ params }: { params: Promise<{ id: s
     incrementViews()
     getCurrentUser()
     loadUserVotes()
-    subscribeToRealtime()
+    const unsubscribe = subscribeToRealtime()
+    return () => unsubscribe()
   }, [questionId])
 
   async function getCurrentUser() {

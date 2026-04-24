@@ -33,6 +33,7 @@ export default async function StudentCoursePage({ params }: { params: Promise<{ 
     .from('course_ebooks')
     .select('id, course_id, title, storage_path, created_at')
     .eq('course_id', courseId)
+    .eq('approval_status', 'approved')
     .order('created_at')
 
   // Get ALL modules for this course (students should see full course structure)
@@ -74,6 +75,7 @@ export default async function StudentCoursePage({ params }: { params: Promise<{ 
       .from('module_content')
       .select('*')
       .in('module_id', accessibleModuleIds)
+      .eq('approval_status', 'approved')
       .order('order_index')
 
     for (const item of contentItems || []) {

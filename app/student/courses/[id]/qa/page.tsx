@@ -40,7 +40,8 @@ export default function QAPage({ params }: { params: Promise<{ id: string }> }) 
 
   useEffect(() => {
     loadQuestions()
-    subscribeToQuestions()
+    const unsubscribe = subscribeToQuestions()
+    return () => unsubscribe()
   }, [courseId])
 
   useEffect(() => {

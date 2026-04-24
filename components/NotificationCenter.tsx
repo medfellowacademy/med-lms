@@ -25,7 +25,7 @@ export default function NotificationCenter() {
 
   useEffect(() => {
     loadNotifications()
-    subscribeToNotifications()
+    const unsubscribe = subscribeToNotifications()
 
     // Close dropdown when clicking outside
     function handleClickOutside(event: MouseEvent) {
@@ -35,7 +35,10 @@ export default function NotificationCenter() {
     }
 
     document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+      unsubscribe()
+    }
   }, [])
 
   async function loadNotifications() {

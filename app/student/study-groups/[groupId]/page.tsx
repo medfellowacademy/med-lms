@@ -67,7 +67,8 @@ export default function StudyGroupDetailPage({ params }: { params: Promise<{ gro
     loadMembers()
     loadMessages()
     getCurrentUser()
-    subscribeToMessages()
+    const unsubscribe = subscribeToMessages()
+    return () => unsubscribe()
   }, [groupId])
 
   useEffect(() => {

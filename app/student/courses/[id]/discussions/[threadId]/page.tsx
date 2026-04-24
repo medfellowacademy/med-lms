@@ -54,8 +54,9 @@ export default function ThreadDetailPage({ params }: { params: Promise<{ id: str
     loadThread()
     loadPosts()
     incrementViews()
-    subscribeToRealtime()
+    const unsubscribe = subscribeToRealtime()
     getCurrentUser()
+    return () => unsubscribe()
   }, [threadId])
 
   async function getCurrentUser() {

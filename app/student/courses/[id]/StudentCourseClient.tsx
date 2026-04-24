@@ -22,7 +22,7 @@ interface ContentItem {
   id: string
   module_id: string
   sub_topic_id?: string
-  type: 'video' | 'ppt' | 'pdf'
+  type: 'video' | 'audio' | 'ppt' | 'pdf' | 'document'
   title: string
   storage_path: string
   order_index: number
@@ -211,7 +211,7 @@ export default function StudentCourseClient({
   }
   
   const videos = currentContent.filter(i => i.type === 'video')
-  const resources = currentContent.filter(i => i.type === 'ppt' || i.type === 'pdf')
+  const resources = currentContent.filter(i => i.type === 'audio' || i.type === 'ppt' || i.type === 'pdf' || i.type === 'document')
   
   // Get assessments for active module
   const assessments = activeModule ? (assessmentsByModule[activeModule.id] || []) : []
@@ -450,10 +450,12 @@ export default function StudentCourseClient({
                     {(() => {
                       const items = contentByModule[mod.id] || []
                       const vids = items.filter(i => i.type === 'video').length
-                      const docs = items.filter(i => i.type !== 'video').length
+                      const audios = items.filter(i => i.type === 'audio').length
+                      const docs = items.filter(i => i.type === 'ppt' || i.type === 'pdf' || i.type === 'document').length
                       return (
                         <>
                           {vids > 0 && <span>{vids} video{vids !== 1 ? 's' : ''}</span>}
+                          {audios > 0 && <span>{audios} audio{audios !== 1 ? 's' : ''}</span>}
                           {docs > 0 && <span>{docs} doc{docs !== 1 ? 's' : ''}</span>}
                           {items.length === 0 && <span>No content yet</span>}
                         </>
@@ -903,7 +905,23 @@ export default function StudentCourseClient({
                     Module Resources
                   </p>
                   {resources.map(item => {
-                    const isPpt = item.type === 'ppt'
+                    const getResourceStyle = (type: string) => {
+                      switch(type) {
+                        case 'audio':
+                          return { bg: '#f3e8ff', color: '#7c3aed', label: 'AUDIO' }
+                        case 'ppt':
+                          return { bg: '#fff3e0', color: '#e65100', label: 'PPT' }
+                        case 'pdf':
+                          return { bg: '#fce4ec', color: '#c62828', label: 'PDF' }
+                        case 'document':
+                          return { bg: '#e0f2fe', color: '#0369a1', label: 'DOC' }
+                        default:
+                          return { bg: '#f3f4f6', color: '#6b7280', label: 'FILE' }
+                      }
+                    }
+                    
+                    const style = getResourceStyle(item.type)
+                    
                     return (
                       <div key={item.id} style={{
                         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -912,16 +930,20 @@ export default function StudentCourseClient({
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                           <div style={{
                             width: 28, height: 28, borderRadius: 4,
-                            background: isPpt ? '#fff3e0' : '#fce4ec',
+                            background: style.bg,
                             display: 'flex', alignItems: 'center', justifyContent: 'center',
                             fontSize: 10, fontWeight: 600,
-                            color: isPpt ? '#e65100' : '#c62828'
+                            color: style.color
                           }}>
-                            {item.type.toUpperCase()}
+                            {style.label}
                           </div>
                           <div>
                             <p style={{ fontSize: 12, fontWeight: 500 }}>{item.title}</p>
-                            <p style={{ fontSize: 11, color: 'var(--muted)' }}>{item.type.toUpperCase()} file</p>
+                            <p style={{ fontSize: 11, color: 'var(--muted)' }}>
+                              {item.type === 'audio' ? 'Audio file' : 
+                               item.type === 'document' ? 'Document file' :
+                               `${item.type.toUpperCase()} file`}
+                            </p>
                           </div>
                         </div>
                         <button
