@@ -119,9 +119,9 @@ export default function AdminUsersPage() {
   }
 
   return (
-    <div style={{ padding: 24 }}>
+    <div className="page-pad" style={{ padding: 24 }}>
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+      <div className="stack-sm" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24, gap: 12 }}>
         <div>
           <h1 style={{ fontFamily: "'DM Serif Display', serif", fontSize: 22 }}>Students & Enrollments</h1>
           <p style={{ fontSize: 13, color: 'var(--muted)', marginTop: 2 }}>Create accounts and manage course access</p>
@@ -164,7 +164,7 @@ export default function AdminUsersPage() {
           )}
 
           <form onSubmit={handleCreateUser}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+            <div className="responsive-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
               <div>
                 <label style={{ display: 'block', fontSize: 12, fontWeight: 500, marginBottom: 5 }}>Full Name</label>
                 <input
@@ -193,7 +193,7 @@ export default function AdminUsersPage() {
               </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
+            <div className="responsive-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
               <div>
                 <label style={{ display: 'block', fontSize: 12, fontWeight: 500, marginBottom: 5 }}>Password *</label>
                 <input

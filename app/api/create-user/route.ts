@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabase, createServiceSupabase } from '@/lib/supabase-server'
+import { parseJson } from '@/lib/validate'
+import { createUserSchema } from '@/lib/schemas'
 
 export async function POST(req: NextRequest) {
   // Verify the caller is an admin
@@ -10,8 +12,9 @@ export async function POST(req: NextRequest) {
   const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
   if (profile?.role !== 'admin') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
-  const { email, password, full_name, role = 'student' } = await req.json()
-  if (!email || !password) return NextResponse.json({ error: 'Email and password are required' }, { status: 400 })
+  const parsed = await parseJson(req, createUserSchema)
+  if (parsed.error) return parsed.error
+  const { email, password, full_name, role } = parsed.data
 
   const service = createServiceSupabase()
 

@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabase } from '@/lib/supabase-server'
+import { parseJson } from '@/lib/validate'
+import { activitySchema } from '@/lib/schemas'
 
 export async function POST(req: NextRequest) {
   try {
@@ -10,12 +12,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const body = await req.json()
-    const { course_id, module_id, sub_topic_id, content_id, activity_type } = body
-
-    if (!activity_type) {
-      return NextResponse.json({ error: 'activity_type is required' }, { status: 400 })
-    }
+    const parsed = await parseJson(req, activitySchema)
+    if (parsed.error) return parsed.error
+    const { course_id, module_id, sub_topic_id, content_id, activity_type } = parsed.data
 
     const { data, error } = await supabase
       .from('activity_log')

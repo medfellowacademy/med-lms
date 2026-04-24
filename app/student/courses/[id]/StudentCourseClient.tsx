@@ -36,6 +36,17 @@ interface CourseEbook {
   created_at: string
 }
 
+interface Assessment {
+  id: string
+  module_id: string
+  title: string
+  type: 'quiz' | 'assignment' | 'exam'
+  time_limit_minutes: number | null
+  max_attempts: number
+  due_date: string | null
+  published: boolean
+}
+
 interface Props {
   course: { id: string; title: string; description: string }
   courseEbooks: CourseEbook[]
@@ -44,6 +55,7 @@ interface Props {
   contentByModule: Record<string, ContentItem[]>
   contentBySubTopic: Record<string, ContentItem[]>
   videoUrls: Record<string, string>
+  assessmentsByModule: Record<string, Assessment[]>
 }
 
 export default function StudentCourseClient({ 
@@ -53,7 +65,8 @@ export default function StudentCourseClient({
   subTopicsByModule,
   contentByModule, 
   contentBySubTopic,
-  videoUrls 
+  videoUrls,
+  assessmentsByModule
 }: Props) {
   const firstUnlocked = modules.find(m => !m.is_locked)
   const [activeModule, setActiveModule] = useState<Module | null>(firstUnlocked || null)
@@ -199,6 +212,9 @@ export default function StudentCourseClient({
   
   const videos = currentContent.filter(i => i.type === 'video')
   const resources = currentContent.filter(i => i.type === 'ppt' || i.type === 'pdf')
+  
+  // Get assessments for active module
+  const assessments = activeModule ? (assessmentsByModule[activeModule.id] || []) : []
 
   // Track video progress
   async function trackVideoProgress(contentId: string, currentTime: number, duration: number, completed: boolean) {
@@ -256,40 +272,53 @@ export default function StudentCourseClient({
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       {/* Topbar */}
-      <div style={{
+      <div className="course-topbar" style={{
         background: 'var(--white)', borderBottom: '1px solid var(--border)',
-        padding: '0 24px', height: 52, display: 'flex', alignItems: 'center',
-        justifyContent: 'space-between', flexShrink: 0
+        padding: '0 24px', height: 56, display: 'flex', alignItems: 'center',
+        justifyContent: 'space-between', flexShrink: 0, gap: 12
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <Link href="/student/courses" style={{
-            fontSize: 12, color: 'var(--muted)', textDecoration: 'none',
-            padding: '4px 10px', border: '1px solid var(--border)', borderRadius: 6
-          }}>
-            ← Courses
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', minWidth: 0 }}>
+          <Link href="/student/courses" className="btn btn-ghost btn-sm" style={{ textDecoration: 'none' }}>
+            <svg width="12" height="12" viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clipRule="evenodd"/>
+            </svg>
+            Courses
           </Link>
-          <span style={{ fontFamily: "'DM Serif Display', serif", fontSize: 17 }}>
-            {course.title}
-            {activeModule && ` — ${activeModule.title}`}
-            {activeSubTopic && ` • ${activeSubTopic.title}`}
-          </span>
+          <Link href={`/student/courses/${course.id}/discussions`} className="btn btn-ghost btn-sm" style={{ textDecoration: 'none' }}>
+            <svg width="12" height="12" viewBox="0 0 20 20" fill="currentColor">
+              <path d="M2 5a2 2 0 012-2h7a2 2 0 012 2v4a2 2 0 01-2 2H9l-3 3v-3H4a2 2 0 01-2-2V5z"/><path d="M15 7v2a4 4 0 01-4 4v2a6 6 0 006-6V7h-2z"/>
+            </svg>
+            Discussions
+          </Link>
+          <Link href={`/student/courses/${course.id}/qa`} className="btn btn-ghost btn-sm" style={{ textDecoration: 'none' }}>
+            <svg width="12" height="12" viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-3a1 1 0 00-.867.5 1 1 0 11-1.731-1A3 3 0 0113 8a3.001 3.001 0 01-2 2.83V11a1 1 0 11-2 0v-1a1 1 0 011-1 1 1 0 100-2zm0 8a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd"/>
+            </svg>
+            Q&A
+          </Link>
+          <div style={{ minWidth: 0 }}>
+            <div className="course-title" style={{ fontFamily: "'DM Serif Display', serif", fontSize: 18, lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {course.title}
+            </div>
+            {(activeModule || activeSubTopic) && (
+              <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {activeModule?.title}{activeSubTopic ? ` • ${activeSubTopic.title}` : ''}
+              </div>
+            )}
+          </div>
         </div>
-        <div style={{
-          display: 'inline-flex', alignItems: 'center', gap: 4,
-          background: 'var(--teal-light)', color: 'var(--teal)',
-          fontSize: 11, padding: '3px 10px', borderRadius: 20, fontWeight: 500
-        }}>
-          <svg width="10" height="10" viewBox="0 0 20 20" fill="currentColor">
+        <div className="chip" style={{ flexShrink: 0 }}>
+          <svg width="11" height="11" viewBox="0 0 20 20" fill="currentColor">
             <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
           </svg>
-          {unlockedCount} of {modules.length} modules unlocked
+          {unlockedCount} / {modules.length} unlocked
         </div>
       </div>
 
       {/* Main content */}
-      <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+      <div className="course-shell" style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
         {/* Module sidebar */}
-        <div style={{
+        <div className="course-modules" style={{
           width: 240, background: 'var(--white)', borderRight: '1px solid var(--border)',
           overflowY: 'auto', padding: 16, flexShrink: 0
         }}>
@@ -446,56 +475,50 @@ export default function StudentCourseClient({
         {/* Video + content area */}
         <div style={{ flex: 1, overflowY: 'auto', padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
           {!activeModule || activeModule.is_locked ? (
-            <div style={{
-              background: 'var(--white)', border: '1px solid var(--border)', borderRadius: 10,
+            <div className="card" style={{
               aspectRatio: '16/9', display: 'flex', flexDirection: 'column',
-              alignItems: 'center', justifyContent: 'center', gap: 8
+              alignItems: 'center', justifyContent: 'center', gap: 10,
+              background: 'linear-gradient(180deg, var(--teal-soft) 0%, var(--white) 100%)'
             }}>
               <div style={{
-                width: 48, height: 48, background: '#f3f4f6', borderRadius: '50%',
-                display: 'flex', alignItems: 'center', justifyContent: 'center'
+                width: 56, height: 56, background: 'var(--white)', borderRadius: 14,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                boxShadow: 'var(--shadow-sm)', color: 'var(--teal)'
               }}>
-                <svg width="20" height="20" viewBox="0 0 20 20" fill="#9ca3af">
+                <svg width="24" height="24" viewBox="0 0 20 20" fill="currentColor">
                   <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
                 </svg>
               </div>
-              <p style={{ fontSize: 15, fontWeight: 500, color: 'var(--muted)' }}>Module Locked</p>
-              <p style={{ fontSize: 12, color: '#9ca3af' }}>Your admin will unlock this module</p>
+              <p style={{ fontSize: 16, fontWeight: 600 }}>Module Locked</p>
+              <p style={{ fontSize: 13, color: 'var(--muted)' }}>Your admin will unlock this module for you</p>
             </div>
           ) : (
             <>
               {courseEbooks.length > 0 && (
-                <div style={{ background: 'var(--white)', border: '1px solid var(--border)', borderRadius: 8, padding: '12px 16px' }}>
-                  <p style={{ fontSize: 12, fontWeight: 500, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>
+                <div className="card card-pad" style={{ padding: '14px 18px' }}>
+                  <p style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 12 }}>
                     Course E-Books
                   </p>
-                  {courseEbooks.map(ebook => (
+                  {courseEbooks.map((ebook, idx) => (
                     <div key={ebook.id} style={{
                       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                      padding: '7px 0', borderBottom: '1px solid var(--border)'
+                      padding: '10px 0', borderBottom: idx === courseEbooks.length - 1 ? 'none' : '1px solid var(--border)',
+                      gap: 10, flexWrap: 'wrap'
                     }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0, flex: 1 }}>
                         <div style={{
-                          width: 28, height: 28, borderRadius: 4,
+                          width: 34, height: 34, borderRadius: 8,
                           background: '#fce7f3', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          fontSize: 10, fontWeight: 600, color: '#be185d'
+                          fontSize: 10.5, fontWeight: 700, color: '#be185d', flexShrink: 0
                         }}>
                           PDF
                         </div>
-                        <div>
-                          <p style={{ fontSize: 12, fontWeight: 500 }}>{ebook.title}</p>
-                          <p style={{ fontSize: 11, color: 'var(--muted)' }}>Available for the full course</p>
+                        <div style={{ minWidth: 0 }}>
+                          <p style={{ fontSize: 13, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ebook.title}</p>
+                          <p style={{ fontSize: 11.5, color: 'var(--muted)' }}>Available for the full course</p>
                         </div>
                       </div>
-                      <button
-                        onClick={() => handleDownload(ebook.storage_path, ebook.title)}
-                        style={{
-                          display: 'flex', alignItems: 'center', gap: 4,
-                          fontSize: 12, color: 'var(--teal)', cursor: 'pointer',
-                          padding: '5px 10px', borderRadius: 6, border: '1px solid #9FE1CB',
-                          background: 'transparent', fontFamily: "'DM Sans', sans-serif"
-                        }}
-                      >
+                      <button onClick={() => handleDownload(ebook.storage_path, ebook.title)} className="btn btn-secondary btn-sm">
                         <svg width="12" height="12" viewBox="0 0 20 20" fill="currentColor">
                           <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" />
                         </svg>
@@ -916,6 +939,79 @@ export default function StudentCourseClient({
                           Download
                         </button>
                       </div>
+                    )
+                  })}
+                </div>
+              )}
+
+              {/* Assessments */}
+              {assessments.length > 0 && (
+                <div style={{ background: 'var(--white)', border: '1px solid var(--border)', borderRadius: 8, padding: '12px 16px' }}>
+                  <p style={{ fontSize: 12, fontWeight: 500, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>
+                    Assessments
+                  </p>
+                  {assessments.map(assessment => {
+                    const isDueSoon = assessment.due_date && new Date(assessment.due_date) < new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+                    const isOverdue = assessment.due_date && new Date(assessment.due_date) < new Date()
+                    
+                    return (
+                      <Link 
+                        key={assessment.id} 
+                        href={`/student/assessments/${assessment.id}`}
+                        style={{ textDecoration: 'none' }}
+                      >
+                        <div style={{
+                          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                          padding: '10px 12px', marginBottom: 8, borderRadius: 7,
+                          border: '1px solid var(--border)',
+                          background: 'var(--white)',
+                          cursor: 'pointer',
+                          transition: 'all 0.15s ease'
+                        }}
+                        className="card-hover"
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 }}>
+                            <div style={{
+                              width: 32, height: 32, borderRadius: 6,
+                              background: assessment.type === 'quiz' ? '#faf5ff' : assessment.type === 'exam' ? '#fef3c7' : '#e0f2fe',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              fontSize: 10, fontWeight: 700, flexShrink: 0,
+                              color: assessment.type === 'quiz' ? '#7c3aed' : assessment.type === 'exam' ? '#b45309' : '#0369a1'
+                            }}>
+                              {assessment.type === 'quiz' ? 'QZ' : assessment.type === 'exam' ? 'EX' : 'AS'}
+                            </div>
+                            <div style={{ minWidth: 0, flex: 1 }}>
+                              <p style={{ fontSize: 13, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {assessment.title}
+                              </p>
+                              <div style={{ display: 'flex', gap: 6, marginTop: 2, alignItems: 'center' }}>
+                                {assessment.time_limit_minutes && (
+                                  <span style={{ fontSize: 11, color: 'var(--muted)' }}>
+                                    ⏱ {assessment.time_limit_minutes}min
+                                  </span>
+                                )}
+                                {assessment.max_attempts > 1 && (
+                                  <span style={{ fontSize: 11, color: 'var(--muted)' }}>
+                                    • {assessment.max_attempts} attempts
+                                  </span>
+                                )}
+                                {assessment.due_date && (
+                                  <span style={{ 
+                                    fontSize: 11, 
+                                    color: isOverdue ? '#dc2626' : isDueSoon ? '#d97706' : 'var(--muted)',
+                                    fontWeight: (isOverdue || isDueSoon) ? 500 : 400
+                                  }}>
+                                    • Due {new Date(assessment.due_date).toLocaleDateString()}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                          <svg width="16" height="16" viewBox="0 0 20 20" fill="var(--teal)">
+                            <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
+                          </svg>
+                        </div>
+                      </Link>
                     )
                   })}
                 </div>

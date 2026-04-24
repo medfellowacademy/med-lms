@@ -197,7 +197,7 @@ export default function UploadPage({ params }: { params: Promise<{ id: string }>
   }
 
   return (
-    <div style={{ padding: 24, maxWidth: 600 }}>
+    <div className="page-pad" style={{ padding: 24, maxWidth: 600 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
         <button
           onClick={() => router.push(`/admin/courses/${courseId}`)}

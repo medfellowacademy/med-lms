@@ -33,7 +33,7 @@ export default async function StudentCoursesPage() {
   }
 
   return (
-    <div style={{ padding: 24 }}>
+    <div className="page-pad" style={{ padding: 24 }}>
       <div style={{ marginBottom: 24 }}>
         <h1 style={{ fontFamily: "'DM Serif Display', serif", fontSize: 22 }}>My Courses</h1>
         <p style={{ fontSize: 13, color: 'var(--muted)', marginTop: 2 }}>
@@ -60,7 +60,7 @@ export default async function StudentCoursesPage() {
           </p>
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
+        <div className="responsive-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
           {courses.map((course: any) => {
             const counts = moduleCounts[course.id] || { total: 0, unlocked: 0 }
             return (

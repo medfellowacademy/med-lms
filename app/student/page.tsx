@@ -112,6 +112,38 @@ export default async function StudentDashboardPage() {
     .order('created_at', { ascending: false })
     .limit(10)
 
+  // Get "Continue Where You Left Off" videos (in-progress, not completed)
+  const { data: continueWatching } = await supabase
+    .from('video_progress')
+    .select(`
+      id,
+      content_id,
+      watch_time_seconds,
+      total_duration_seconds,
+      last_watched_at,
+      module_content (
+        id,
+        title,
+        type,
+        storage_path,
+        module_id,
+        modules (
+          id,
+          title,
+          course_id,
+          courses (
+            id,
+            title
+          )
+        )
+      )
+    `)
+    .eq('user_id', user.id)
+    .eq('completed', false)
+    .gt('watch_time_seconds', 10) // Must have watched at least 10 seconds
+    .order('last_watched_at', { ascending: false })
+    .limit(3)
+
   // Overall statistics
   const totalCourses = courses.length
   const totalCompleted = courseStats.filter(c => c.progress === 100).length
@@ -124,6 +156,7 @@ export default async function StudentDashboardPage() {
       profile={profile}
       courseStats={courseStats}
       recentActivity={recentActivity || []}
+      continueWatching={continueWatching || []}
       overallStats={{
         totalCourses,
         totalCompleted,

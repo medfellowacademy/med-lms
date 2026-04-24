@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabase } from '@/lib/supabase-server'
+import { parseJson } from '@/lib/validate'
+import { createNoteSchema } from '@/lib/schemas'
 
 // GET - Fetch notes for a video or search notes
 export async function GET(req: NextRequest) {
@@ -57,14 +59,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const body = await req.json()
-    const { content_id, module_id, course_id, note_text, timestamp_seconds } = body
-
-    if (!content_id || !module_id || !course_id || !note_text) {
-      return NextResponse.json({ 
-        error: 'content_id, module_id, course_id, and note_text are required' 
-      }, { status: 400 })
-    }
+    const parsed = await parseJson(req, createNoteSchema)
+    if (parsed.error) return parsed.error
+    const { content_id, module_id, course_id, note_text, timestamp_seconds } = parsed.data
 
     const { data, error } = await supabase
       .from('video_notes')

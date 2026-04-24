@@ -77,7 +77,7 @@ export default function ModuleSubTopicsPage({ params }: { params: Promise<{ id: 
   }
 
   return (
-    <div style={{ padding: 24, maxWidth: 800 }}>
+    <div className="page-pad" style={{ padding: 24, maxWidth: 800 }}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
         <button

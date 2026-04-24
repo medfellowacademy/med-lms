@@ -132,6 +132,22 @@ export default async function StudentCoursePage({ params }: { params: Promise<{ 
 
   console.log('Total video URLs generated:', Object.keys(videoUrls).length)
 
+  // Get assessments for accessible modules
+  let assessmentsByModule: Record<string, any[]> = {}
+  if (accessibleModuleIds.length > 0) {
+    const { data: assessments } = await supabase
+      .from('assessments')
+      .select('id, module_id, title, type, time_limit_minutes, max_attempts, due_date, published')
+      .in('module_id', accessibleModuleIds)
+      .eq('published', true)
+      .order('created_at', { ascending: false })
+
+    for (const assessment of assessments || []) {
+      if (!assessmentsByModule[assessment.module_id]) assessmentsByModule[assessment.module_id] = []
+      assessmentsByModule[assessment.module_id].push(assessment)
+    }
+  }
+
   return (
     <StudentCourseClient
       course={course}
@@ -141,6 +157,7 @@ export default async function StudentCoursePage({ params }: { params: Promise<{ 
       contentByModule={contentByModule}
       contentBySubTopic={contentBySubTopic}
       videoUrls={videoUrls}
+      assessmentsByModule={assessmentsByModule}
     />
   )
 }

@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabase } from '@/lib/supabase-server'
+import { parseJson } from '@/lib/validate'
+import { createBookmarkSchema } from '@/lib/schemas'
 
 // GET - Fetch bookmarks for a video
 export async function GET(req: NextRequest) {
@@ -51,14 +53,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const body = await req.json()
-    const { content_id, module_id, title, timestamp_seconds } = body
-
-    if (!content_id || !module_id || !title) {
-      return NextResponse.json({ 
-        error: 'content_id, module_id, and title are required' 
-      }, { status: 400 })
-    }
+    const parsed = await parseJson(req, createBookmarkSchema)
+    if (parsed.error) return parsed.error
+    const { content_id, module_id, title, timestamp_seconds } = parsed.data
 
     const { data, error } = await supabase
       .from('video_bookmarks')

@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabase } from '@/lib/supabase-server'
+import { parseJson } from '@/lib/validate'
+import { videoProgressSchema } from '@/lib/schemas'
 
 export async function POST(req: NextRequest) {
   try {
@@ -10,12 +12,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const body = await req.json()
-    const { content_id, watch_time_seconds, total_duration_seconds, completed } = body
-
-    if (!content_id) {
-      return NextResponse.json({ error: 'content_id is required' }, { status: 400 })
-    }
+    const parsed = await parseJson(req, videoProgressSchema)
+    if (parsed.error) return parsed.error
+    const { content_id, watch_time_seconds, total_duration_seconds, completed } = parsed.data
 
     // Upsert video progress
     const { data, error } = await supabase

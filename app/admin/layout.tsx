@@ -17,13 +17,13 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   if (profile?.role !== 'admin') redirect('/student')
 
   return (
-    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
+    <div className="app-shell" style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
       <Sidebar
         role="admin"
         userName={profile.full_name || profile.email || 'Admin'}
         userEmail={profile.email || ''}
       />
-      <div style={{ flex: 1, overflow: 'auto', display: 'flex', flexDirection: 'column' }}>
+      <div className="app-main" style={{ flex: 1, overflow: 'auto', display: 'flex', flexDirection: 'column' }}>
         {children}
       </div>
     </div>
