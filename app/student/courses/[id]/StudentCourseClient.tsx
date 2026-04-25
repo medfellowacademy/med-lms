@@ -541,24 +541,55 @@ export default function StudentCourseClient({
                     overflow: 'hidden',
                     position: 'relative',
                     width: '100%',
-                    paddingTop: '56.25%' /* 16:9 ratio - works on all browsers including Safari/iPad */
+                    paddingTop: '56.25%' /* 16:9 ratio fallback for Safari/iPad */
                   }}>
                     <video
                       ref={playerRef}
                       key={activeVideo.id}
-                      src={videoUrls[activeVideo.id]}
                       controls
                       playsInline
                       webkit-playsinline="true"
                       x-webkit-airplay="allow"
-                      style={{
-                        position: 'absolute',
-                        top: 0,
-                        left: 0,
-                        width: '100%',
-                        height: '100%',
-                        backgroundColor: '#000'
+                      preload="metadata"
+                      className="video-player"
+                      onLoadedMetadata={(e: any) => {
+                        const video = e.target as HTMLVideoElement
+                        video.playbackRate = playbackRate
+                        const savedTime = localStorage.getItem(`video_${activeVideo.id}`)
+                        if (savedTime && parseFloat(savedTime) > 5) {
+                          video.currentTime = parseFloat(savedTime)
+                        }
                       }}
+                      onTimeUpdate={(e: any) => {
+                        const video = e.target as HTMLVideoElement
+                        const currentTime = video.currentTime
+                        const duration = video.duration
+                        if (Math.floor(currentTime) % 5 === 0) {
+                          localStorage.setItem(`video_${activeVideo.id}`, currentTime.toString())
+                        }
+                        if (Math.floor(currentTime) % 10 === 0 && currentTime > 0) {
+                          trackVideoProgress(activeVideo.id, currentTime, duration, false)
+                        }
+                        if (currentTime / duration > 0.9) {
+                          trackVideoProgress(activeVideo.id, currentTime, duration, true)
+                        }
+                      }}
+                      onEnded={() => {
+                        if (activeVideo) {
+                          trackVideoProgress(activeVideo.id, 0, 0, true)
+                          localStorage.removeItem(`video_${activeVideo.id}`)
+                        }
+                      }}
+                      onPlay={() => {
+                        logActivity('viewed_video', activeVideo.id, activeModule?.id, activeSubTopic?.id)
+                      }}
+                      onError={(e: any) => {
+                        console.error('Video Error:', e)
+                      }}
+                    >
+                      <source src={videoUrls[activeVideo.id]} type="video/mp4" />
+                      <source src={videoUrls[activeVideo.id]} />
+                    </video>
                       onLoadedMetadata={(e: any) => {
                         const video = e.target as HTMLVideoElement
                         video.playbackRate = playbackRate

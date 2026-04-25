@@ -283,9 +283,21 @@ html {
   -webkit-text-size-adjust: 100%;
 }
 
-img, video, svg {
+img, svg {
   max-width: 100%;
   height: auto;
+}
+video {
+  max-width: 100%;
+}
+.video-player {
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  background: #000;
+  display: block;
 }
 
 /* App shell: admin + student layout wrapper */
