@@ -539,16 +539,22 @@ export default function StudentCourseClient({
                     background: '#0d1117', 
                     borderRadius: 10, 
                     overflow: 'hidden',
-                    aspectRatio: '16/9',
-                    position: 'relative'
+                    position: 'relative',
+                    width: '100%',
+                    paddingTop: '56.25%' /* 16:9 ratio - works on all browsers including Safari/iPad */
                   }}>
                     <video
                       ref={playerRef}
                       key={activeVideo.id}
                       src={videoUrls[activeVideo.id]}
                       controls
-                      controlsList="nodownload"
+                      playsInline
+                      webkit-playsinline="true"
+                      x-webkit-airplay="allow"
                       style={{
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
                         width: '100%',
                         height: '100%',
                         backgroundColor: '#000'
