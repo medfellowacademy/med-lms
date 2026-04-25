@@ -590,49 +590,6 @@ export default function StudentCourseClient({
                       <source src={videoUrls[activeVideo.id]} type="video/mp4" />
                       <source src={videoUrls[activeVideo.id]} />
                     </video>
-                      onLoadedMetadata={(e: any) => {
-                        const video = e.target as HTMLVideoElement
-                        video.playbackRate = playbackRate
-                        
-                        // Resume from last position
-                        const savedTime = localStorage.getItem(`video_${activeVideo.id}`)
-                        if (savedTime && parseFloat(savedTime) > 5) {
-                          video.currentTime = parseFloat(savedTime)
-                        }
-                      }}
-                      onTimeUpdate={(e: any) => {
-                        const video = e.target as HTMLVideoElement
-                        const currentTime = video.currentTime
-                        const duration = video.duration
-                        
-                        // Save position for resume
-                        if (Math.floor(currentTime) % 5 === 0) {
-                          localStorage.setItem(`video_${activeVideo.id}`, currentTime.toString())
-                        }
-                        
-                        // Track progress every 10 seconds
-                        if (Math.floor(currentTime) % 10 === 0 && currentTime > 0) {
-                          trackVideoProgress(activeVideo.id, currentTime, duration, false)
-                        }
-                        
-                        // Auto-mark as complete if watched 90%+
-                        if (currentTime / duration > 0.9) {
-                          trackVideoProgress(activeVideo.id, currentTime, duration, true)
-                        }
-                      }}
-                      onEnded={() => {
-                        if (activeVideo) {
-                          trackVideoProgress(activeVideo.id, 0, 0, true)
-                          localStorage.removeItem(`video_${activeVideo.id}`)
-                        }
-                      }}
-                      onPlay={() => {
-                        logActivity('viewed_video', activeVideo.id, activeModule?.id, activeSubTopic?.id)
-                      }}
-                      onError={(e: any) => {
-                        console.error('Video Error:', e)
-                      }}
-                    />
                   </div>
 
                   {/* Video Controls */}
