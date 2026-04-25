@@ -29,7 +29,9 @@ export default async function StudentCoursePage({ params }: { params: Promise<{ 
 
   if (!course) redirect('/student/courses')
 
-  const { data: courseEbooks } = await supabase
+  // Use service role to bypass RLS for ebooks (same pattern as videos)
+  const serviceSupabaseForEbooks = createServiceSupabase()
+  const { data: courseEbooks } = await serviceSupabaseForEbooks
     .from('course_ebooks')
     .select('id, course_id, title, storage_path, created_at')
     .eq('course_id', courseId)
