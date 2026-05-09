@@ -476,6 +476,41 @@ export default function StudentCourseClient({
 
         {/* Video + content area */}
         <div style={{ flex: 1, overflowY: 'auto', padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {/* Course E-Books — always visible regardless of module lock state */}
+          {courseEbooks.length > 0 && (
+            <div className="card card-pad" style={{ padding: '14px 18px' }}>
+              <p style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 12 }}>
+                Course E-Books
+              </p>
+              {courseEbooks.map((ebook, idx) => (
+                <div key={ebook.id} style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  padding: '10px 0', borderBottom: idx === courseEbooks.length - 1 ? 'none' : '1px solid var(--border)',
+                  gap: 10, flexWrap: 'wrap'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0, flex: 1 }}>
+                    <div style={{
+                      width: 34, height: 34, borderRadius: 8,
+                      background: '#fce7f3', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: 10.5, fontWeight: 700, color: '#be185d', flexShrink: 0
+                    }}>
+                      PDF
+                    </div>
+                    <div style={{ minWidth: 0 }}>
+                      <p style={{ fontSize: 13, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ebook.title}</p>
+                      <p style={{ fontSize: 11.5, color: 'var(--muted)' }}>Available for the full course</p>
+                    </div>
+                  </div>
+                  <button onClick={() => handleDownload(ebook.storage_path, ebook.title)} className="btn btn-secondary btn-sm">
+                    <svg width="12" height="12" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" />
+                    </svg>
+                    Download
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
           {!activeModule || activeModule.is_locked ? (
             <div className="card" style={{
               aspectRatio: '16/9', display: 'flex', flexDirection: 'column',
@@ -496,41 +531,6 @@ export default function StudentCourseClient({
             </div>
           ) : (
             <>
-              {courseEbooks.length > 0 && (
-                <div className="card card-pad" style={{ padding: '14px 18px' }}>
-                  <p style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 12 }}>
-                    Course E-Books
-                  </p>
-                  {courseEbooks.map((ebook, idx) => (
-                    <div key={ebook.id} style={{
-                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                      padding: '10px 0', borderBottom: idx === courseEbooks.length - 1 ? 'none' : '1px solid var(--border)',
-                      gap: 10, flexWrap: 'wrap'
-                    }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0, flex: 1 }}>
-                        <div style={{
-                          width: 34, height: 34, borderRadius: 8,
-                          background: '#fce7f3', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          fontSize: 10.5, fontWeight: 700, color: '#be185d', flexShrink: 0
-                        }}>
-                          PDF
-                        </div>
-                        <div style={{ minWidth: 0 }}>
-                          <p style={{ fontSize: 13, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ebook.title}</p>
-                          <p style={{ fontSize: 11.5, color: 'var(--muted)' }}>Available for the full course</p>
-                        </div>
-                      </div>
-                      <button onClick={() => handleDownload(ebook.storage_path, ebook.title)} className="btn btn-secondary btn-sm">
-                        <svg width="12" height="12" viewBox="0 0 20 20" fill="currentColor">
-                          <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" />
-                        </svg>
-                        Download
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-
               {/* Video player */}
               {activeVideo ? (
                 videoUrls[activeVideo.id] ? (

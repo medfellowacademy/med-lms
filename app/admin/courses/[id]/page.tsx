@@ -56,6 +56,7 @@ export default function AdminCoursePage({ params }: { params: Promise<{ id: stri
   const [deletingEbook, setDeletingEbook] = useState<string | null>(null)
   const [announcementModalOpen, setAnnouncementModalOpen] = useState(false)
   const [allCourses, setAllCourses] = useState<{ id: string; title: string }[]>([])
+  const [reorderingModule, setReorderingModule] = useState<string | null>(null)
   const [previewModal, setPreviewModal] = useState<{
     isOpen: boolean
     title: string
@@ -125,6 +126,20 @@ export default function AdminCoursePage({ params }: { params: Promise<{ id: stri
     })
     setNewModTitle('')
     setAddingMod(false)
+    load()
+  }
+
+  async function moveModule(mod: Module, direction: 'up' | 'down') {
+    const idx = modules.findIndex(m => m.id === mod.id)
+    const swapIdx = direction === 'up' ? idx - 1 : idx + 1
+    if (swapIdx < 0 || swapIdx >= modules.length) return
+    const swapMod = modules[swapIdx]
+    setReorderingModule(mod.id)
+    await Promise.all([
+      supabase.from('modules').update({ order_index: swapMod.order_index }).eq('id', mod.id),
+      supabase.from('modules').update({ order_index: mod.order_index }).eq('id', swapMod.id),
+    ])
+    setReorderingModule(null)
     load()
   }
 
@@ -352,6 +367,27 @@ export default function AdminCoursePage({ params }: { params: Promise<{ id: stri
                           </div>
                         </div>
                         <div className="module-toolbar" style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                          {/* Reorder buttons */}
+                          <button
+                            onClick={() => moveModule(mod, 'up')}
+                            disabled={reorderingModule === mod.id || modules.indexOf(mod) === 0}
+                            className="btn btn-ghost btn-sm"
+                            aria-label="Move module up"
+                            title="Move up"
+                            style={{ padding: '4px 8px' }}
+                          >
+                            <svg width="12" height="12" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z" clipRule="evenodd"/></svg>
+                          </button>
+                          <button
+                            onClick={() => moveModule(mod, 'down')}
+                            disabled={reorderingModule === mod.id || modules.indexOf(mod) === modules.length - 1}
+                            className="btn btn-ghost btn-sm"
+                            aria-label="Move module down"
+                            title="Move down"
+                            style={{ padding: '4px 8px' }}
+                          >
+                            <svg width="12" height="12" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd"/></svg>
+                          </button>
                           <button onClick={() => setExpanded(isExpanded ? null : mod.id)} className="btn btn-ghost btn-sm">
                             {isExpanded ? 'Hide' : 'Content'}
                           </button>

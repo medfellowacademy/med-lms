@@ -93,7 +93,7 @@ export default function UploadPage({ params }: { params: Promise<{ id: string }>
 
   // File size limits (in bytes)
   const MAX_FILE_SIZE = {
-    video: 1024 * 1024 * 1024, // 1GB (1024MB) for videos
+    video: 5 * 1024 * 1024 * 1024, // 5GB for videos
     ppt: 100 * 1024 * 1024,    // 100MB for presentations
     pdf: 50 * 1024 * 1024,     // 50MB for PDFs
     audio: 100 * 1024 * 1024,  // 100MB for audio
@@ -103,8 +103,11 @@ export default function UploadPage({ params }: { params: Promise<{ id: string }>
   function validateFile(file: File, type: 'video' | 'ppt' | 'pdf' | 'audio' | 'document'): string | null {
     // Check file size
     if (file.size > MAX_FILE_SIZE[type]) {
-      const maxMB = MAX_FILE_SIZE[type] / 1024 / 1024
-      return `File too large. Maximum size for ${type} is ${maxMB}MB.`
+      const maxBytes = MAX_FILE_SIZE[type]
+      const maxLabel = maxBytes >= 1024 * 1024 * 1024
+        ? `${maxBytes / 1024 / 1024 / 1024}GB`
+        : `${maxBytes / 1024 / 1024}MB`
+      return `File too large. Maximum size for ${type} is ${maxLabel}.`
     }
 
     // Check file type
@@ -176,7 +179,7 @@ export default function UploadPage({ params }: { params: Promise<{ id: string }>
         course_id: courseId,
         title: contentTitle.trim(),
         storage_path: storagePath,
-        approval_status: 'pending',
+        approval_status: 'approved',
         uploaded_by: user?.id,
         file_size: file.size,
         mime_type: file.type,
@@ -418,7 +421,7 @@ export default function UploadPage({ params }: { params: Promise<{ id: string }>
                       Click to choose a {contentType === 'video' ? 'video' : contentType.toUpperCase()} file
                     </p>
                     <p style={{ fontSize: 11, color: '#9ca3af', marginTop: 4 }}>
-                      {contentType === 'video' ? 'MP4, MOV, AVI' : contentType === 'ppt' ? 'PPT, PPTX' : 'PDF'} · Max {MAX_FILE_SIZE[contentType] / 1024 / 1024}MB
+                      {contentType === 'video' ? 'MP4, MOV, AVI' : contentType === 'ppt' ? 'PPT, PPTX' : 'PDF'} · Max {MAX_FILE_SIZE[contentType] >= 1024 * 1024 * 1024 ? `${MAX_FILE_SIZE[contentType] / 1024 / 1024 / 1024}GB` : `${MAX_FILE_SIZE[contentType] / 1024 / 1024}MB`}
                     </p>
                   </div>
                 )}

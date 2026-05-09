@@ -298,6 +298,12 @@ function GradesTab() {
 
 export default function DashboardClient({ profile, courseStats, recentActivity, continueWatching, overallStats }: Props) {
   const [activeTab, setActiveTab] = useState<'overview' | 'activity' | 'progress' | 'roadmap' | 'grades'>('overview')
+  const [currentDate, setCurrentDate] = useState('')
+
+  useEffect(() => {
+    // Set date on client to avoid hydration mismatch
+    setCurrentDate(new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' }))
+  }, [])
 
   const formatDuration = (seconds: number) => {
     const mins = Math.floor(seconds / 60)
@@ -397,7 +403,7 @@ export default function DashboardClient({ profile, courseStats, recentActivity, 
         <div style={{ position: 'absolute', right: 60, bottom: -60, width: 140, height: 140, borderRadius: '50%', background: 'rgba(255,255,255,0.06)' }} />
         <div style={{ position: 'relative' }}>
           <div style={{ fontSize: 12, opacity: 0.85, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 6, fontWeight: 500 }}>
-            {new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}
+            {currentDate}
           </div>
           <h1 style={{ fontFamily: "'DM Serif Display', serif", fontSize: 30, lineHeight: 1.15, marginBottom: 8 }}>
             Welcome back, {profile?.full_name?.split(' ')[0] || 'Student'} 👋
