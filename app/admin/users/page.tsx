@@ -21,6 +21,12 @@ interface Enrollment {
 }
 
 export default function AdminUsersPage() {
+  // Change password modal state
+  const [showPasswordModal, setShowPasswordModal] = useState(false)
+  const [newUserPassword, setNewUserPassword] = useState('')
+  const [passwordError, setPasswordError] = useState('')
+  const [passwordSuccess, setPasswordSuccess] = useState('')
+  const [passwordLoading, setPasswordLoading] = useState(false)
   const supabase = createClient()
   const [profiles, setProfiles] = useState<Profile[]>([])
   const [courses, setCourses] = useState<Course[]>([])
@@ -116,6 +122,38 @@ export default function AdminUsersPage() {
     setNewRole('student')
     setCreating(false)
     load()
+  }
+
+  async function handleChangePassword(e: React.FormEvent) {
+    e.preventDefault()
+    setPasswordError('')
+    setPasswordSuccess('')
+    setPasswordLoading(true)
+    if (!selectedUser?.id) {
+      setPasswordError('No user selected')
+      setPasswordLoading(false)
+      return
+    }
+    if (newUserPassword.length < 6) {
+      setPasswordError('Password must be at least 6 characters')
+      setPasswordLoading(false)
+      return
+    }
+    const res = await fetch('/api/admin-update-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: selectedUser.id, newPassword: newUserPassword })
+    })
+    const data = await res.json()
+    if (!res.ok) {
+      setPasswordError(data.error || 'Failed to update password')
+      setPasswordLoading(false)
+      return
+    }
+    setPasswordSuccess('Password updated successfully')
+    setNewUserPassword('')
+    setPasswordLoading(false)
+    setTimeout(() => setShowPasswordModal(false), 1200)
   }
 
   return (
@@ -344,14 +382,69 @@ export default function AdminUsersPage() {
                     >
                       Make {selectedUser.role === 'admin' ? 'Student' : 'Admin'}
                     </button>
+                    <button
+                      onClick={() => { setShowPasswordModal(true); setPasswordError(''); setPasswordSuccess(''); setNewUserPassword('') }}
+                      style={{
+                        padding: '6px 14px', fontSize: 12, background: '#e0e7ff', color: '#3730a3',
+                        border: '1px solid #a5b4fc', borderRadius: 7, cursor: 'pointer', fontFamily: "'DM Sans', sans-serif"
+                      }}
+                    >
+                      Change Password
+                    </button>
                   </div>
                 </div>
+
+                {/* Change Password Modal */}
+                {showPasswordModal && (
+                  <div style={{
+                    position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
+                    background: 'rgba(0,0,0,0.18)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center'
+                  }}>
+                    <div style={{ background: 'white', borderRadius: 10, padding: 28, minWidth: 320, boxShadow: '0 2px 16px #0001', border: '1px solid #ddd' }}>
+                      <h4 style={{ fontSize: 15, fontWeight: 600, marginBottom: 12 }}>Change Password</h4>
+                      <form onSubmit={handleChangePassword}>
+                        <input
+                          type="text"
+                          value={newUserPassword}
+                          onChange={e => setNewUserPassword(e.target.value)}
+                          placeholder="New password (min 6 chars)"
+                          style={{ width: '100%', padding: '9px 12px', border: '1px solid #ddd', borderRadius: 7, fontSize: 13, marginBottom: 10 }}
+                          disabled={passwordLoading}
+                        />
+                        {passwordError && <div style={{ color: '#dc2626', fontSize: 13, marginBottom: 8 }}>{passwordError}</div>}
+                        {passwordSuccess && <div style={{ color: '#15803d', fontSize: 13, marginBottom: 8 }}>{passwordSuccess}</div>}
+                        <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
+                          <button
+                            type="submit"
+                            disabled={passwordLoading}
+                            style={{
+                              padding: '8px 20px', background: '#3730a3', color: 'white', border: 'none', borderRadius: 7,
+                              fontSize: 13, fontWeight: 500, cursor: passwordLoading ? 'not-allowed' : 'pointer', opacity: passwordLoading ? 0.7 : 1
+                            }}
+                          >
+                            {passwordLoading ? 'Saving…' : 'Save'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setShowPasswordModal(false)}
+                            disabled={passwordLoading}
+                            style={{
+                              padding: '8px 18px', background: 'transparent', color: '#6b7280', border: '1px solid #ddd', borderRadius: 7,
+                              fontSize: 13, cursor: 'pointer'
+                            }}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </form>
+                    </div>
+                  </div>
+                )}
 
                 {/* Course Enrollments */}
                 <p style={{ fontSize: 11, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: 12 }}>
                   Course Access
                 </p>
-
                 {courses.length === 0 ? (
                   <p style={{ fontSize: 13, color: 'var(--muted)' }}>No courses created yet.</p>
                 ) : (
