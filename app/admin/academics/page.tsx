@@ -87,14 +87,15 @@ export default function AcademicsPage() {
     setLoading(true)
     const [{ data: profiles }, { data: enrollData }] = await Promise.all([
       supabase.from('profiles').select('*').eq('role', 'student').order('full_name'),
+      // select without status first for safety; status is added via migration
       supabase.from('enrollments').select('user_id, course_id, status'),
     ])
     setStudents(profiles || [])
     const map: Record<string, { courseIds: string[]; statuses: CourseStatus[] }> = {}
-    for (const e of enrollData || []) {
+    for (const e of (enrollData || [])) {
       if (!map[e.user_id]) map[e.user_id] = { courseIds: [], statuses: [] }
       map[e.user_id].courseIds.push(e.course_id)
-      map[e.user_id].statuses.push((e.status as CourseStatus) || 'active')
+      map[e.user_id].statuses.push(((e as any).status as CourseStatus) || 'active')
     }
     setAllEnrollments(map)
     setLoading(false)
@@ -106,7 +107,7 @@ export default function AcademicsPage() {
     const [{ data: enrollments }, { data: documents }] = await Promise.all([
       supabase
         .from('enrollments')
-        .select('course_id, enrolled_at, course_end_date, status, courses(id, title)')
+        .select('course_id, enrolled_at, course_end_date, status, courses!inner(id, title)')
         .eq('user_id', student.id)
         .order('enrolled_at', { ascending: false }),
       supabase
