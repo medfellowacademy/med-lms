@@ -27,7 +27,8 @@ export async function POST(req: NextRequest) {
   })
 
   if (authError) {
-    return NextResponse.json({ error: authError.message }, { status: 500 })
+    console.error('create-user authError:', JSON.stringify(authError))
+    return NextResponse.json({ error: authError.message, code: authError.code, status: authError.status }, { status: 500 })
   }
 
   // Update profile with name and role
