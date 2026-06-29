@@ -36,11 +36,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: authError.message, code: authError.code, details: authError }, { status: 500 })
     }
 
-    // Update profile with name and role
+    // Upsert profile — handles cases where the trigger didn't create it
     const { error: profileError } = await service
       .from('profiles')
-      .update({ full_name: full_name || email, role })
-      .eq('id', authData.user.id)
+      .upsert({ id: authData.user.id, email, full_name: full_name || email, role }, { onConflict: 'id' })
 
     if (profileError) {
       console.error('create-user profileError:', JSON.stringify(profileError))
