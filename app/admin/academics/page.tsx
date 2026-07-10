@@ -41,6 +41,14 @@ interface StudentDetail extends Student {
   documents: StudentDocument[]
 }
 
+interface ModuleRow {
+  id: string
+  title: string
+  order_index: number
+  is_locked: boolean
+  override: boolean | null // null = no override (follow course default), true = force unlock, false = force lock
+}
+
 interface EditForm {
   full_name: string
   phone: string
@@ -83,6 +91,12 @@ export default function AcademicsPage() {
   const [previewDocUrl, setPreviewDocUrl] = useState<string | null>(null)
   const [previewDocTitle, setPreviewDocTitle] = useState('')
 
+  // Module access state
+  const [expandedModulesCourse, setExpandedModulesCourse] = useState<string | null>(null)
+  const [moduleData, setModuleData] = useState<Record<string, ModuleRow[]>>({})
+  const [moduleLoading, setModuleLoading] = useState<Record<string, boolean>>({})
+  const [moduleSaving, setModuleSaving] = useState<Record<string, boolean>>({})
+
   async function load() {
     setLoading(true)
     const [{ data: profiles }, { data: enrollData }] = await Promise.all([
@@ -104,6 +118,8 @@ export default function AcademicsPage() {
   async function loadDetail(student: Student) {
     setLoadingDetail(true)
     setSelected({ ...student, enrollments: [], documents: [] })
+    setExpandedModulesCourse(null)
+    setModuleData({})
     const [{ data: enrollments }, { data: documents }] = await Promise.all([
       supabase
         .from('enrollments')
@@ -196,6 +212,50 @@ export default function AcademicsPage() {
     await supabase.from('student_documents').delete().eq('id', doc.id)
     setDeletingDoc(null)
     setSelected(prev => prev ? { ...prev, documents: prev.documents.filter(d => d.id !== doc.id) } : prev)
+  }
+
+  async function toggleModulesPanel(courseId: string) {
+    if (expandedModulesCourse === courseId) { setExpandedModulesCourse(null); return }
+    setExpandedModulesCourse(courseId)
+    if (!moduleData[courseId]) loadModuleAccess(courseId)
+  }
+
+  async function loadModuleAccess(courseId: string) {
+    if (!selected) return
+    setModuleLoading(prev => ({ ...prev, [courseId]: true }))
+    const [{ data: modules }, res] = await Promise.all([
+      supabase.from('modules').select('id, title, order_index, is_locked').eq('course_id', courseId).order('order_index'),
+      fetch(`/api/student-module-access?course_id=${courseId}&student_id=${selected.id}`),
+    ])
+    const { data: overrides } = await res.json()
+    const overrideMap: Record<string, boolean> = {}
+    for (const o of overrides || []) overrideMap[o.module_id] = o.is_unlocked
+    const rows: ModuleRow[] = (modules || []).map((m: any) => ({
+      ...m,
+      override: m.id in overrideMap ? overrideMap[m.id] : null,
+    }))
+    setModuleData(prev => ({ ...prev, [courseId]: rows }))
+    setModuleLoading(prev => ({ ...prev, [courseId]: false }))
+  }
+
+  async function setModuleOverride(courseId: string, moduleId: string, value: boolean | null) {
+    if (!selected) return
+    const key = `${courseId}:${moduleId}`
+    setModuleSaving(prev => ({ ...prev, [key]: true }))
+    if (value === null) {
+      await fetch(`/api/student-module-access?student_id=${selected.id}&module_id=${moduleId}`, { method: 'DELETE' })
+    } else {
+      await fetch('/api/student-module-access', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ student_id: selected.id, module_id: moduleId, is_unlocked: value }),
+      })
+    }
+    setModuleData(prev => ({
+      ...prev,
+      [courseId]: (prev[courseId] || []).map(m => m.id === moduleId ? { ...m, override: value } : m),
+    }))
+    setModuleSaving(prev => ({ ...prev, [key]: false }))
   }
 
   async function previewDocument(doc: StudentDocument) {
@@ -473,6 +533,16 @@ export default function AcademicsPage() {
                               title="Set end date"
                             />
                             <button
+                              onClick={() => toggleModulesPanel(en.course_id)}
+                              className="btn btn-sm"
+                              style={{
+                                background: expandedModulesCourse === en.course_id ? '#ede9fe' : '#f5f3ff',
+                                color: '#6d28d9', borderColor: '#ddd6fe', whiteSpace: 'nowrap'
+                              }}
+                            >
+                              Modules
+                            </button>
+                            <button
                               onClick={() => router.push(`/admin/progress?student=${selected.id}&course=${en.course_id}`)}
                               className="btn btn-sm"
                               style={{ background: '#eff6ff', color: '#1d4ed8', borderColor: '#bfdbfe', whiteSpace: 'nowrap' }}
@@ -481,6 +551,69 @@ export default function AcademicsPage() {
                             </button>
                           </div>
                         </div>
+
+                        {expandedModulesCourse === en.course_id && (
+                          <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${cfg.border}` }}>
+                            {moduleLoading[en.course_id] ? (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                {[0, 1, 2].map(i => <div key={i} className="skeleton" style={{ height: 30, borderRadius: 6 }} />)}
+                              </div>
+                            ) : (moduleData[en.course_id] || []).length === 0 ? (
+                              <p style={{ fontSize: 12, color: 'var(--muted)' }}>No modules in this course.</p>
+                            ) : (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                {(moduleData[en.course_id] || []).map(m => {
+                                  const key = `${en.course_id}:${m.id}`
+                                  const saving = moduleSaving[key]
+                                  const effectiveLocked = m.override === null ? m.is_locked : !m.override
+                                  return (
+                                    <div key={m.id} style={{
+                                      display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
+                                      padding: '6px 10px', borderRadius: 8, background: 'var(--white)',
+                                      border: '1px solid var(--border)', opacity: saving ? 0.6 : 1,
+                                    }}>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                                        <span style={{ fontSize: 12.5, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                          {m.title}
+                                        </span>
+                                        <span style={{
+                                          fontSize: 9.5, fontWeight: 700, padding: '1px 7px', borderRadius: 10,
+                                          background: effectiveLocked ? '#fee2e2' : '#d1fae5',
+                                          color: effectiveLocked ? '#991b1b' : '#065f46',
+                                          flexShrink: 0,
+                                        }}>
+                                          {effectiveLocked ? 'Locked' : 'Unlocked'}
+                                        </span>
+                                      </div>
+                                      <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                                        {([
+                                          { label: 'Default', value: null as boolean | null },
+                                          { label: 'Unlock', value: true },
+                                          { label: 'Lock', value: false },
+                                        ]).map(opt => (
+                                          <button
+                                            key={opt.label}
+                                            disabled={saving}
+                                            onClick={() => setModuleOverride(en.course_id, m.id, opt.value)}
+                                            style={{
+                                              fontSize: 10, padding: '2px 8px', borderRadius: 12, cursor: 'pointer',
+                                              fontWeight: 700, border: '1.5px solid',
+                                              borderColor: m.override === opt.value ? '#a78bfa' : 'var(--border)',
+                                              background: m.override === opt.value ? '#ede9fe' : 'transparent',
+                                              color: m.override === opt.value ? '#6d28d9' : 'var(--muted)',
+                                            }}
+                                          >
+                                            {opt.label}
+                                          </button>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
                     )
                   })}

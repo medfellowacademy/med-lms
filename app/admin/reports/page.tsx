@@ -36,6 +36,61 @@ interface AtRiskStudent {
   average_score: number
 }
 
+interface VideoItem {
+  id: string
+  title: string
+  order_index: number
+  storage_path: string
+  duration: number | null // seconds; null = not probed yet or unreadable
+  probing: boolean
+}
+
+interface ModuleVideos {
+  id: string
+  title: string
+  order_index: number
+  videos: VideoItem[]
+}
+
+interface CourseVideos {
+  id: string
+  title: string
+  modules: ModuleVideos[]
+}
+
+function formatDuration(seconds: number | null): string {
+  if (seconds == null) return '—'
+  const total = Math.round(seconds)
+  const h = Math.floor(total / 3600)
+  const m = Math.floor((total % 3600) / 60)
+  const s = total % 60
+  if (h > 0) return `${h}h ${m}m ${s}s`
+  if (m > 0) return `${m}m ${s}s`
+  return `${s}s`
+}
+
+function getVideoDuration(url: string): Promise<number | null> {
+  return new Promise(resolve => {
+    const el = document.createElement('video')
+    el.preload = 'metadata'
+    const timeout = setTimeout(() => { cleanup(); resolve(null) }, 15000)
+    function cleanup() {
+      clearTimeout(timeout)
+      el.onloadedmetadata = null
+      el.onerror = null
+      el.removeAttribute('src')
+      el.load()
+    }
+    el.onloadedmetadata = () => {
+      const d = el.duration
+      cleanup()
+      resolve(Number.isFinite(d) ? d : null)
+    }
+    el.onerror = () => { cleanup(); resolve(null) }
+    el.src = url
+  })
+}
+
 export default function AdminReportsPage() {
   const supabase = createClient()
   const [assessmentStats, setAssessmentStats] = useState<AssessmentStats[]>([])
@@ -43,11 +98,25 @@ export default function AdminReportsPage() {
   const [questionAnalysis, setQuestionAnalysis] = useState<QuestionAnalysis[]>([])
   const [atRiskStudents, setAtRiskStudents] = useState<AtRiskStudent[]>([])
   const [loading, setLoading] = useState(true)
-  const [activeView, setActiveView] = useState<'overview' | 'questions' | 'students'>('overview')
+  const [activeView, setActiveView] = useState<'overview' | 'questions' | 'students' | 'videos'>('overview')
+
+  // Video content report state
+  const [videoCourses, setVideoCourses] = useState<CourseVideos[]>([])
+  const [videoReportLoading, setVideoReportLoading] = useState(false)
+  const [videoReportLoaded, setVideoReportLoaded] = useState(false)
+  const [videoProbeDone, setVideoProbeDone] = useState(0)
+  const [videoProbeTotal, setVideoProbeTotal] = useState(0)
+  const [expandedVideoCourses, setExpandedVideoCourses] = useState<Set<string>>(new Set())
+  const [probedCourseIds, setProbedCourseIds] = useState<Set<string>>(new Set())
+  const [computingTotal, setComputingTotal] = useState(false)
 
   useEffect(() => {
     loadData()
   }, [])
+
+  useEffect(() => {
+    if (activeView === 'videos' && !videoReportLoaded) loadVideoReport()
+  }, [activeView])
 
   async function loadData() {
     try {
@@ -207,6 +276,92 @@ export default function AdminReportsPage() {
     setAtRiskStudents(atRisk)
   }
 
+  async function loadVideoReport() {
+    setVideoReportLoading(true)
+    const [{ data: courses }, { data: modules }, { data: content }] = await Promise.all([
+      supabase.from('courses').select('id, title').order('title'),
+      supabase.from('modules').select('id, title, course_id, order_index').order('order_index'),
+      supabase.from('module_content').select('id, title, module_id, storage_path, order_index').eq('type', 'video').order('order_index'),
+    ])
+
+    const moduleMap: Record<string, ModuleVideos> = {}
+    ;(modules || []).forEach((m: any) => {
+      moduleMap[m.id] = { id: m.id, title: m.title, order_index: m.order_index, videos: [] }
+    })
+    ;(content || []).forEach((c: any) => {
+      const mod = moduleMap[c.module_id]
+      if (mod) mod.videos.push({ id: c.id, title: c.title, order_index: c.order_index, storage_path: c.storage_path, duration: null, probing: false })
+    })
+
+    const courseList: CourseVideos[] = (courses || []).map((c: any) => ({
+      id: c.id,
+      title: c.title,
+      modules: (modules || []).filter((m: any) => m.course_id === c.id).map((m: any) => moduleMap[m.id]),
+    }))
+
+    setVideoCourses(courseList)
+    setVideoReportLoading(false)
+    setVideoReportLoaded(true)
+
+    const allVideos = courseList.flatMap(c => c.modules.flatMap(m => m.videos))
+    setVideoProbeTotal(allVideos.length)
+    setVideoProbeDone(0)
+    // Durations are NOT probed here — that's slow (each video needs a signed URL +
+    // metadata fetch). Instead we probe lazily: per-course when expanded, or in bulk
+    // if the admin explicitly asks via "Measure all durations".
+  }
+
+  function updateVideoInState(videoId: string, patch: Partial<VideoItem>) {
+    setVideoCourses(prev => prev.map(c => ({
+      ...c,
+      modules: c.modules.map(m => ({
+        ...m,
+        videos: m.videos.map(v => v.id === videoId ? { ...v, ...patch } : v),
+      })),
+    })))
+  }
+
+  async function probeVideos(videos: VideoItem[]) {
+    const toProbe = videos.filter(v => v.duration == null)
+    const CONCURRENCY = 6
+    let idx = 0
+    async function worker() {
+      while (idx < toProbe.length) {
+        const video = toProbe[idx++]
+        updateVideoInState(video.id, { probing: true })
+        const { data } = await supabase.storage.from('medfellow-content').createSignedUrl(video.storage_path, 300)
+        const duration = data?.signedUrl ? await getVideoDuration(data.signedUrl) : null
+        updateVideoInState(video.id, { duration, probing: false })
+        setVideoProbeDone(d => d + 1)
+      }
+    }
+    await Promise.all(Array.from({ length: CONCURRENCY }, worker))
+  }
+
+  function toggleVideoCourse(courseId: string) {
+    const willExpand = !expandedVideoCourses.has(courseId)
+    setExpandedVideoCourses(prev => {
+      const next = new Set(prev)
+      if (next.has(courseId)) next.delete(courseId)
+      else next.add(courseId)
+      return next
+    })
+    if (willExpand && !probedCourseIds.has(courseId)) {
+      const course = videoCourses.find(c => c.id === courseId)
+      const videos = course ? course.modules.flatMap(m => m.videos) : []
+      setProbedCourseIds(prev => new Set(prev).add(courseId))
+      if (videos.length > 0) probeVideos(videos)
+    }
+  }
+
+  async function computeAllDurations() {
+    setComputingTotal(true)
+    setProbedCourseIds(new Set(videoCourses.map(c => c.id)))
+    const remaining = videoCourses.flatMap(c => c.modules.flatMap(m => m.videos)).filter(v => v.duration == null)
+    await probeVideos(remaining)
+    setComputingTotal(false)
+  }
+
   if (loading) {
     return (
       <div style={{ padding: 28 }}>
@@ -236,6 +391,12 @@ export default function AdminReportsPage() {
           className={`tab ${activeView === 'questions' ? 'active' : ''}`}
         >
           Question Analysis
+        </button>
+        <button
+          onClick={() => setActiveView('videos')}
+          className={`tab ${activeView === 'videos' ? 'active' : ''}`}
+        >
+          Video Content
         </button>
         <button
           onClick={() => setActiveView('students')}
@@ -423,6 +584,147 @@ export default function AdminReportsPage() {
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Video Content */}
+      {activeView === 'videos' && (
+        <div>
+          {videoReportLoading && videoCourses.length === 0 ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {[0, 1, 2].map(i => <div key={i} className="skeleton" style={{ height: 70, borderRadius: 10 }} />)}
+            </div>
+          ) : (() => {
+            const totalVideos = videoCourses.reduce((sum, c) => sum + c.modules.reduce((s, m) => s + m.videos.length, 0), 0)
+            const knownSeconds = videoCourses.reduce((sum, c) => sum + c.modules.reduce((s, m) => s + m.videos.reduce((vs, v) => vs + (v.duration || 0), 0), 0), 0)
+            const allMeasured = videoProbeTotal > 0 && videoProbeDone >= videoProbeTotal
+            return (
+              <>
+                <div style={{
+                  display: 'flex', gap: 24, alignItems: 'center', flexWrap: 'wrap',
+                  padding: '14px 18px', border: '1px solid var(--border)', borderRadius: 10,
+                  background: 'var(--teal-soft)', marginBottom: 20,
+                }}>
+                  <div>
+                    <p style={{ fontSize: 11, color: 'var(--muted)' }}>Courses</p>
+                    <p style={{ fontSize: 20, fontWeight: 700 }}>{videoCourses.length}</p>
+                  </div>
+                  <div>
+                    <p style={{ fontSize: 11, color: 'var(--muted)' }}>Total Videos</p>
+                    <p style={{ fontSize: 20, fontWeight: 700 }}>{totalVideos}</p>
+                  </div>
+                  <div>
+                    <p style={{ fontSize: 11, color: 'var(--muted)' }}>
+                      Total Duration{!allMeasured && videoProbeDone > 0 ? ' (partial)' : ''}
+                    </p>
+                    <p style={{ fontSize: 20, fontWeight: 700, color: 'var(--teal)' }}>{formatDuration(knownSeconds)}</p>
+                  </div>
+                  <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
+                    {computingTotal ? (
+                      <p style={{ fontSize: 12, color: 'var(--muted)' }}>
+                        Measuring… {videoProbeDone}/{videoProbeTotal}
+                      </p>
+                    ) : !allMeasured ? (
+                      <button onClick={computeAllDurations} className="btn btn-secondary btn-sm">
+                        Measure all durations ({videoProbeTotal - videoProbeDone} left)
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+                <p style={{ fontSize: 11.5, color: 'var(--muted)', marginTop: -12, marginBottom: 20 }}>
+                  Video lengths aren't stored — expand a course to measure it, or use "Measure all durations" for the full total. This reads each video's metadata, so it can take a while for many videos.
+                </p>
+
+                {videoCourses.length === 0 ? (
+                  <div className="empty-state">
+                    <div className="emoji">🎬</div>
+                    <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>No courses yet</h3>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {videoCourses.map(course => {
+                      const courseVideos = course.modules.flatMap(m => m.videos)
+                      const courseSeconds = courseVideos.reduce((s, v) => s + (v.duration || 0), 0)
+                      const isProbed = probedCourseIds.has(course.id)
+                      const coursePending = courseVideos.some(v => v.probing)
+                      const expanded = expandedVideoCourses.has(course.id)
+                      const durationLabel = courseVideos.length === 0
+                        ? '—'
+                        : !isProbed
+                          ? 'Tap to measure'
+                          : `${formatDuration(courseSeconds)}${coursePending ? '…' : ''}`
+                      return (
+                        <div key={course.id} className="card" style={{ padding: 0, overflow: 'hidden' }}>
+                          <button
+                            onClick={() => toggleVideoCourse(course.id)}
+                            style={{
+                              width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                              gap: 12, padding: '14px 18px', background: 'transparent', border: 'none', cursor: 'pointer',
+                              textAlign: 'left',
+                            }}
+                          >
+                            <div>
+                              <p style={{ fontSize: 14, fontWeight: 600 }}>{course.title}</p>
+                              <p style={{ fontSize: 11.5, color: 'var(--muted)', marginTop: 2 }}>
+                                {courseVideos.length} video{courseVideos.length !== 1 ? 's' : ''} across {course.modules.length} module{course.modules.length !== 1 ? 's' : ''}
+                              </p>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+                              <span style={{
+                                fontSize: 14, fontWeight: 700,
+                                color: !isProbed && courseVideos.length > 0 ? 'var(--muted)' : 'var(--teal)',
+                                fontStyle: !isProbed && courseVideos.length > 0 ? 'italic' : 'normal',
+                              }}>
+                                {durationLabel}
+                              </span>
+                              <span style={{ fontSize: 12, color: 'var(--muted)' }}>{expanded ? '▲' : '▼'}</span>
+                            </div>
+                          </button>
+
+                          {expanded && (
+                            <div style={{ borderTop: '1px solid var(--border)', padding: '10px 18px 16px' }}>
+                              {course.modules.filter(m => m.videos.length > 0).length === 0 ? (
+                                <p style={{ fontSize: 12.5, color: 'var(--muted)', padding: '8px 0' }}>No videos in this course.</p>
+                              ) : (
+                                course.modules.filter(m => m.videos.length > 0).map(mod => {
+                                  const modSeconds = mod.videos.reduce((s, v) => s + (v.duration || 0), 0)
+                                  return (
+                                    <div key={mod.id} style={{ marginTop: 12 }}>
+                                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
+                                        <p style={{ fontSize: 12.5, fontWeight: 600 }}>{mod.title}</p>
+                                        <p style={{ fontSize: 11.5, color: 'var(--muted)' }}>
+                                          {mod.videos.length} video{mod.videos.length !== 1 ? 's' : ''} · {formatDuration(modSeconds)}
+                                        </p>
+                                      </div>
+                                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                        {mod.videos.map(v => (
+                                          <div key={v.id} style={{
+                                            display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10,
+                                            padding: '6px 10px', borderRadius: 6, background: '#f9fafb',
+                                          }}>
+                                            <span style={{ fontSize: 12.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                              {v.title}
+                                            </span>
+                                            <span style={{ fontSize: 12, fontWeight: 600, color: v.duration == null ? 'var(--muted)' : 'var(--text)', flexShrink: 0 }}>
+                                              {v.probing ? '…' : formatDuration(v.duration)}
+                                            </span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )
+                                })
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </>
+            )
+          })()}
         </div>
       )}
 
