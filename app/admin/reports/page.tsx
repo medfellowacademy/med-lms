@@ -325,9 +325,11 @@ export default function AdminReportsPage() {
     const allVideos = courseList.flatMap(c => c.modules.flatMap(m => m.videos))
     setVideoProbeTotal(allVideos.length)
     setVideoProbeDone(0)
-    // Durations are NOT probed here — that's slow (each video needs a signed URL +
-    // metadata fetch). Instead we probe lazily: per-course when expanded, or in bulk
-    // if the admin explicitly asks via "Measure all durations".
+
+    // Counts/table render immediately above. Durations fill in automatically in the
+    // background (not awaited, so it never blocks the page) — no manual tap needed.
+    setProbedCourseIds(new Set(courseList.map(c => c.id)))
+    probeVideos(allVideos)
   }
 
   function updateVideoInState(videoId: string, patch: Partial<VideoItem>) {
@@ -358,19 +360,12 @@ export default function AdminReportsPage() {
   }
 
   function toggleVideoCourse(courseId: string) {
-    const willExpand = !expandedVideoCourses.has(courseId)
     setExpandedVideoCourses(prev => {
       const next = new Set(prev)
       if (next.has(courseId)) next.delete(courseId)
       else next.add(courseId)
       return next
     })
-    if (willExpand && !probedCourseIds.has(courseId)) {
-      const course = videoCourses.find(c => c.id === courseId)
-      const videos = course ? course.modules.flatMap(m => m.videos) : []
-      setProbedCourseIds(prev => new Set(prev).add(courseId))
-      if (videos.length > 0) probeVideos(videos)
-    }
   }
 
   async function computeAllDurations() {
@@ -702,22 +697,18 @@ export default function AdminReportsPage() {
                     <p style={{ fontSize: 20, fontWeight: 700, color: 'var(--teal)' }}>{formatDuration(knownSeconds)}</p>
                   </div>
                   <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
-                    {computingTotal ? (
+                    {!allMeasured && (
                       <p style={{ fontSize: 12, color: 'var(--muted)' }}>
-                        Measuring… {videoProbeDone}/{videoProbeTotal}
+                        Measuring durations… {videoProbeDone}/{videoProbeTotal}
                       </p>
-                    ) : !allMeasured ? (
-                      <button onClick={computeAllDurations} className="btn btn-secondary btn-sm">
-                        Measure all durations ({videoProbeTotal - videoProbeDone} left)
-                      </button>
-                    ) : null}
+                    )}
                     <button onClick={exportContentSheet} disabled={computingTotal} className="btn btn-primary btn-sm">
                       Export CSV
                     </button>
                   </div>
                 </div>
                 <p style={{ fontSize: 11.5, color: 'var(--muted)', marginBottom: 20 }}>
-                  PPT/PDF/video counts are exact and instant. Video lengths aren't stored, so they're measured on demand by reading each video's real metadata — expand a course to measure it, or "Measure all durations" / "Export CSV" for the full accurate total (Export automatically measures everything first).
+                  PPT/PDF/video counts are exact and instant. Video lengths aren't stored, so they're read from each video's real file metadata automatically in the background — durations fill in on their own; no action needed. Use "Export CSV" for a spreadsheet copy.
                 </p>
 
                 {videoCourses.length === 0 ? (
@@ -744,14 +735,11 @@ export default function AdminReportsPage() {
                           const coursePpt = course.modules.reduce((s, m) => s + m.pptCount, 0)
                           const coursePdf = course.modules.reduce((s, m) => s + m.pdfCount, 0)
                           const courseSeconds = courseVideos.reduce((s, v) => s + (v.duration || 0), 0)
-                          const isProbed = probedCourseIds.has(course.id)
                           const coursePending = courseVideos.some(v => v.probing)
                           const expanded = expandedVideoCourses.has(course.id)
                           const durationLabel = courseVideos.length === 0
                             ? '—'
-                            : !isProbed
-                              ? 'Tap to measure'
-                              : `${formatDuration(courseSeconds)}${coursePending ? '…' : ''}`
+                            : `${formatDuration(courseSeconds)}${coursePending ? '…' : ''}`
                           return (
                             <Fragment key={course.id}>
                               <tr
@@ -768,15 +756,11 @@ export default function AdminReportsPage() {
                                 <td style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 600 }}>{coursePpt}</td>
                                 <td style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 600 }}>{courseVideos.length}</td>
                                 <td style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 600 }}>{coursePdf}</td>
-                                <td style={{
-                                  padding: '10px 14px', textAlign: 'right', fontWeight: 700,
-                                  color: !isProbed && courseVideos.length > 0 ? 'var(--muted)' : 'var(--teal)',
-                                  fontStyle: !isProbed && courseVideos.length > 0 ? 'italic' : 'normal',
-                                }}>
+                                <td style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 700, color: 'var(--teal)' }}>
                                   {durationLabel}
                                 </td>
                                 <td style={{ padding: '10px 14px', textAlign: 'right', color: 'var(--muted)' }}>
-                                  {isProbed ? formatHoursDecimal(courseSeconds) : '—'}
+                                  {formatHoursDecimal(courseSeconds)}
                                 </td>
                               </tr>
                               {expanded && course.modules.map(mod => {
