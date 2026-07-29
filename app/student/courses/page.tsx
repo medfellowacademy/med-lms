@@ -1,11 +1,11 @@
 import { redirect } from 'next/navigation'
-import { createServerSupabase } from '@/lib/supabase-server'
+import { createServerSupabase, getCurrentUser } from '@/lib/supabase-server'
 import CourseCard from './CourseCard'
 
 export default async function StudentCoursesPage() {
-  const supabase = await createServerSupabase()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getCurrentUser()
   if (!user) redirect('/login')
+  const supabase = await createServerSupabase()
 
   // Get enrolled courses
   const { data: enrollments } = await supabase
