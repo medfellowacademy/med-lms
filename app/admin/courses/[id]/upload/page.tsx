@@ -76,7 +76,7 @@ export default function UploadPage({ params }: { params: Promise<{ id: string }>
   }, [selectedModule])
 
   const acceptMap = {
-    video: 'video/*',
+    video: 'video/mp4',
     ppt: '.ppt,.pptx,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation',
     pdf: 'application/pdf',
     audio: 'audio/*',
@@ -111,10 +111,12 @@ export default function UploadPage({ params }: { params: Promise<{ id: string }>
     }
 
     // Check file type
-    // Only mp4/mov are accepted for video: iOS/iPadOS Safari cannot play WebM, AVI,
-    // or MKV at all (no codec support), so those would silently fail to play on iPhone.
+    // Video is MP4-only: it's the one format that plays on every device (iPhone,
+    // Android, Windows, Mac, Linux) without exception. MOV/WebM/AVI/MKV each fail
+    // to play on at least one major platform, so they're rejected here rather than
+    // silently producing a broken player for some students.
     const validTypes = {
-      video: ['video/mp4', 'video/quicktime'],
+      video: ['video/mp4'],
       ppt: [
         'application/vnd.ms-powerpoint',
         'application/vnd.openxmlformats-officedocument.presentationml.presentation'
@@ -129,6 +131,9 @@ export default function UploadPage({ params }: { params: Promise<{ id: string }>
     }
 
     if (!validTypes[type].includes(file.type)) {
+      if (type === 'video') {
+        return 'Only MP4 videos are supported. MP4 is the one format that plays on every device — please convert your video to MP4 before uploading (e.g. iPhone Photos app → Share → "Most Compatible" export).'
+      }
       return `Invalid file type. Please upload a valid ${type.toUpperCase()} file.`
     }
 
@@ -423,7 +428,7 @@ export default function UploadPage({ params }: { params: Promise<{ id: string }>
                       Click to choose a {contentType === 'video' ? 'video' : contentType.toUpperCase()} file
                     </p>
                     <p style={{ fontSize: 11, color: '#9ca3af', marginTop: 4 }}>
-                      {contentType === 'video' ? 'MP4, MOV (iPhone-compatible only)' : contentType === 'ppt' ? 'PPT, PPTX' : 'PDF'} · Max {MAX_FILE_SIZE[contentType] >= 1024 * 1024 * 1024 ? `${MAX_FILE_SIZE[contentType] / 1024 / 1024 / 1024}GB` : `${MAX_FILE_SIZE[contentType] / 1024 / 1024}MB`}
+                      {contentType === 'video' ? 'MP4 only (plays on every device)' : contentType === 'ppt' ? 'PPT, PPTX' : 'PDF'} · Max {MAX_FILE_SIZE[contentType] >= 1024 * 1024 * 1024 ? `${MAX_FILE_SIZE[contentType] / 1024 / 1024 / 1024}GB` : `${MAX_FILE_SIZE[contentType] / 1024 / 1024}MB`}
                     </p>
                   </div>
                 )}
