@@ -111,8 +111,10 @@ export default function UploadPage({ params }: { params: Promise<{ id: string }>
     }
 
     // Check file type
+    // Only mp4/mov are accepted for video: iOS/iPadOS Safari cannot play WebM, AVI,
+    // or MKV at all (no codec support), so those would silently fail to play on iPhone.
     const validTypes = {
-      video: ['video/mp4', 'video/quicktime', 'video/x-msvideo', 'video/avi', 'video/webm'],
+      video: ['video/mp4', 'video/quicktime'],
       ppt: [
         'application/vnd.ms-powerpoint',
         'application/vnd.openxmlformats-officedocument.presentationml.presentation'
@@ -421,7 +423,7 @@ export default function UploadPage({ params }: { params: Promise<{ id: string }>
                       Click to choose a {contentType === 'video' ? 'video' : contentType.toUpperCase()} file
                     </p>
                     <p style={{ fontSize: 11, color: '#9ca3af', marginTop: 4 }}>
-                      {contentType === 'video' ? 'MP4, MOV, AVI' : contentType === 'ppt' ? 'PPT, PPTX' : 'PDF'} · Max {MAX_FILE_SIZE[contentType] >= 1024 * 1024 * 1024 ? `${MAX_FILE_SIZE[contentType] / 1024 / 1024 / 1024}GB` : `${MAX_FILE_SIZE[contentType] / 1024 / 1024}MB`}
+                      {contentType === 'video' ? 'MP4, MOV (iPhone-compatible only)' : contentType === 'ppt' ? 'PPT, PPTX' : 'PDF'} · Max {MAX_FILE_SIZE[contentType] >= 1024 * 1024 * 1024 ? `${MAX_FILE_SIZE[contentType] / 1024 / 1024 / 1024}GB` : `${MAX_FILE_SIZE[contentType] / 1024 / 1024}MB`}
                     </p>
                   </div>
                 )}
