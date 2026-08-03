@@ -164,7 +164,19 @@ export default function AdminCoursePage({ params }: { params: Promise<{ id: stri
   }
 
   async function previewContent(item: Content) {
-    // Get signed URL from Supabase storage
+    // Video/audio go through our same-origin streaming proxy (/api/stream) instead of a
+    // direct cross-origin Supabase URL — Safari/WebKit hangs indefinitely on cross-origin
+    // Range-based media without the right CORS headers exposed, while Chrome tolerates it.
+    if (item.type === 'video') {
+      setPreviewModal({
+        isOpen: true,
+        title: item.title,
+        type: item.type,
+        url: `/api/stream/${item.id}`,
+      })
+      return
+    }
+
     const { data } = await supabase.storage
       .from('medfellow-content')
       .createSignedUrl(item.storage_path, 3600) // 1 hour expiry

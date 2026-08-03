@@ -156,10 +156,19 @@ export default function ContentReviewPage() {
   }
 
   async function handlePreview(item: ContentItem) {
+    // Video/audio go through our same-origin streaming proxy (/api/stream) instead of a
+    // direct cross-origin Supabase URL — Safari/WebKit hangs indefinitely on cross-origin
+    // Range-based media without the right CORS headers exposed, while Chrome tolerates it.
+    if (item.type === 'video' || item.type === 'audio') {
+      setPreviewUrl(`/api/stream/${item.id}`)
+      setPreviewItem(item)
+      return
+    }
+
     const { data } = await supabase.storage
       .from('medfellow-content')
       .createSignedUrl(item.storagePath, 3600)
-    
+
     if (data?.signedUrl) {
       setPreviewUrl(data.signedUrl)
       setPreviewItem(item)
