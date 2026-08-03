@@ -89,25 +89,14 @@ export default async function StudentCoursePage({ params }: { params: Promise<{ 
       assessmentsByModule[assessment.module_id].push(assessment)
     }
 
-    // Generate all video signed URLs in a single batched storage API call instead of
-    // one round trip per video — this was the main source of slow page loads/video opens.
-    const videoItems = (contentItems || []).filter(item => item.type === 'video')
-    if (videoItems.length > 0) {
-      const { data: signedUrls, error } = await serviceSupabase.storage
-        .from('medfellow-content')
-        .createSignedUrls(videoItems.map(item => item.storage_path), 4 * 60 * 60)
-
-      if (error) {
-        console.error('Failed to create signed URLs for videos:', error)
-      } else {
-        const pathToUrl: Record<string, string> = {}
-        for (const entry of signedUrls || []) {
-          if (entry.signedUrl) pathToUrl[entry.path ?? ''] = entry.signedUrl
-        }
-        for (const item of videoItems) {
-          const url = pathToUrl[item.storage_path]
-          if (url) videoUrls[item.id] = url
-        }
+    // Videos are served through our own same-origin streaming proxy (/api/stream) instead
+    // of a direct cross-origin Supabase signed URL. Safari's media engine enforces CORS on
+    // Range-based streaming far more strictly than Chrome, which caused videos to load
+    // fine on Chrome/Android/Windows but hang indefinitely on Mac/iPad/iPhone. A same-origin
+    // URL sidesteps CORS entirely. The proxy route re-checks access itself per request.
+    for (const item of contentItems || []) {
+      if (item.type === 'video') {
+        videoUrls[item.id] = `/api/stream/${item.id}`
       }
     }
   }

@@ -29,22 +29,6 @@ interface ContentItem {
   mime_type?: string | null
 }
 
-// iOS Safari trusts the <source type> hint and will refuse to play a file whose
-// actual container doesn't match it (desktop browsers are more forgiving and just
-// sniff the real bytes). Falling back to a guess from the file extension covers
-// content uploaded before the mime_type column existed.
-function videoMimeType(item: ContentItem): string {
-  if (item.mime_type) return item.mime_type
-  const ext = item.storage_path.split('.').pop()?.toLowerCase()
-  switch (ext) {
-    case 'mov': return 'video/quicktime'
-    case 'webm': return 'video/webm'
-    case 'avi': return 'video/x-msvideo'
-    case 'mkv': return 'video/x-matroska'
-    default: return 'video/mp4'
-  }
-}
-
 interface CourseEbook {
   id: string
   course_id: string
@@ -563,6 +547,7 @@ export default function StudentCourseClient({
                     <video
                       ref={playerRef}
                       key={activeVideo.id}
+                      src={videoUrls[activeVideo.id]}
                       controls
                       playsInline
                       webkit-playsinline="true"
@@ -603,10 +588,7 @@ export default function StudentCourseClient({
                       onError={(e: any) => {
                         console.error('Video Error:', e)
                       }}
-                    >
-                      <source src={videoUrls[activeVideo.id]} type={videoMimeType(activeVideo)} />
-                      <source src={videoUrls[activeVideo.id]} />
-                    </video>
+                    />
                   </div>
 
                   {/* Video Controls */}
