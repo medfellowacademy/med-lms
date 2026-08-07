@@ -103,8 +103,20 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ cont
     accessCache.set(cacheKey, { signedUrl, expiresAt: Date.now() + ACCESS_CACHE_TTL_MS })
   }
 
-  const range = req.headers.get('range')
-  const upstream = await fetch(signedUrl, range ? { headers: { Range: range } } : {})
+  // Forward the client's conditional/range headers to the upstream fetch verbatim. Safari's
+  // AVFoundation media pipeline validates resource continuity across the many range requests
+  // one playback makes (via If-Range/If-None-Match against ETag/Last-Modified) far more
+  // strictly than Chrome does — if that validation has nothing to check against, or gets
+  // inconsistent answers between requests, WebKit can end up dropping the audio track while
+  // still rendering video frames instead of failing loudly. We were not forwarding any of
+  // this before, which is the most likely explanation for "video plays, no audio, Safari only."
+  const upstreamHeaders: Record<string, string> = {}
+  for (const h of ['range', 'if-range', 'if-none-match', 'if-modified-since']) {
+    const value = req.headers.get(h)
+    if (value) upstreamHeaders[h] = value
+  }
+
+  const upstream = await fetch(signedUrl, { headers: upstreamHeaders })
 
   if (!upstream.ok || !upstream.body) {
     accessCache.delete(cacheKey) // cached URL may have expired upstream — force a fresh one next time
@@ -119,6 +131,12 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ cont
   if (contentLength) headers.set('Content-Length', contentLength)
   const contentRange = upstream.headers.get('content-range')
   if (contentRange) headers.set('Content-Range', contentRange)
+  // Give WebKit a stable identity for this resource across its many range requests so it
+  // doesn't treat each chunk as a potentially-different resource.
+  const etag = upstream.headers.get('etag')
+  if (etag) headers.set('ETag', etag)
+  const lastModified = upstream.headers.get('last-modified')
+  if (lastModified) headers.set('Last-Modified', lastModified)
 
   return new NextResponse(upstream.body, { status: upstream.status, headers })
 }
