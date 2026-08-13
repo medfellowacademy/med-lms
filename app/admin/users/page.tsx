@@ -391,6 +391,15 @@ export default function AdminUsersPage() {
                     >
                       Change Password
                     </button>
+                    <button
+                      onClick={() => deleteUser(selectedUser.id)}
+                      style={{
+                        padding: '6px 14px', fontSize: 12, background: '#fef2f2', color: '#dc2626',
+                        border: '1px solid #fecaca', borderRadius: 7, cursor: 'pointer', fontFamily: "'DM Sans', sans-serif"
+                      }}
+                    >
+                      Delete User
+                    </button>
                   </div>
                 </div>
 
