@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { motion } from 'framer-motion'
 
@@ -35,16 +36,18 @@ interface Submission {
 
 export default function AdminGradingPage() {
   const supabase = createClient()
+  const searchParams = useSearchParams()
+  const assessmentId = searchParams.get('assessment_id')
   const [submissions, setSubmissions] = useState<Submission[]>([])
   const [loading, setLoading] = useState(true)
-  const [statusFilter, setStatusFilter] = useState<'all' | 'submitted' | 'graded'>('submitted')
+  const [statusFilter, setStatusFilter] = useState<'all' | 'submitted' | 'graded'>(assessmentId ? 'all' : 'submitted')
   const [searchQuery, setSearchQuery] = useState('')
   const [sortBy, setSortBy] = useState<'submitted_at' | 'student_name' | 'course'>('submitted_at')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
 
   useEffect(() => {
     loadSubmissions()
-  }, [statusFilter])
+  }, [statusFilter, assessmentId])
 
   async function loadSubmissions() {
     try {
@@ -64,6 +67,10 @@ export default function AdminGradingPage() {
             )
           )
         `)
+
+      if (assessmentId) {
+        query = query.eq('assessment_id', assessmentId)
+      }
 
       if (statusFilter !== 'all') {
         query = query.eq('status', statusFilter)

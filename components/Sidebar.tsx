@@ -66,6 +66,15 @@ export default function Sidebar({ role, userName, userEmail }: SidebarProps) {
       ),
     },
     {
+      href: '/admin/assessments',
+      label: 'Exams & Quizzes',
+      icon: (
+        <svg width="15" height="15" viewBox="0 0 20 20" fill="currentColor">
+          <path fillRule="evenodd" d="M6 2a2 2 0 00-2 2v12a2 2 0 002 2h8a2 2 0 002-2V7.414A2 2 0 0015.414 6L12 2.586A2 2 0 0010.586 2H6zm5 1.5V6a1 1 0 001 1h2.5L11 3.5zM7 10a1 1 0 000 2h6a1 1 0 100-2H7zm0 4a1 1 0 100 2h4a1 1 0 100-2H7z" clipRule="evenodd"/>
+        </svg>
+      ),
+    },
+    {
       href: '/admin/grading',
       label: 'Grading',
       icon: (

@@ -16,6 +16,101 @@ interface Question {
   explanation?: string
 }
 
+const CSV_OPTION_LETTERS = ['a', 'b', 'c', 'd', 'e', 'f']
+
+// Minimal RFC-4180-ish CSV parser: handles quoted fields, escaped quotes ("") and commas inside quotes.
+function parseCsv(text: string): string[][] {
+  const rows: string[][] = []
+  let row: string[] = []
+  let field = ''
+  let inQuotes = false
+
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i]
+    if (inQuotes) {
+      if (char === '"') {
+        if (text[i + 1] === '"') { field += '"'; i++ } else { inQuotes = false }
+      } else {
+        field += char
+      }
+    } else if (char === '"') {
+      inQuotes = true
+    } else if (char === ',') {
+      row.push(field); field = ''
+    } else if (char === '\n' || char === '\r') {
+      if (char === '\r' && text[i + 1] === '\n') i++
+      row.push(field); field = ''
+      if (row.some(c => c.trim() !== '')) rows.push(row)
+      row = []
+    } else {
+      field += char
+    }
+  }
+  if (field !== '' || row.length) {
+    row.push(field)
+    if (row.some(c => c.trim() !== '')) rows.push(row)
+  }
+  return rows
+}
+
+// Expected columns (header row, any order): question_text, option_a..option_f, correct_option, points, explanation
+function questionsFromCsvRows(rows: string[][]): { questions: Question[]; errors: string[] } {
+  if (rows.length < 2) return { questions: [], errors: ['File needs a header row plus at least one question row.'] }
+
+  const header = rows[0].map(h => h.trim().toLowerCase())
+  const col = (name: string) => header.indexOf(name)
+  const idxText = col('question_text')
+  const idxCorrect = col('correct_option')
+  const idxPoints = col('points')
+  const idxExplanation = col('explanation')
+  const optionCols = CSV_OPTION_LETTERS.map(l => col(`option_${l}`)).filter(i => i !== -1)
+
+  if (idxText === -1) return { questions: [], errors: ['Missing required column: question_text'] }
+  if (optionCols.length < 2) return { questions: [], errors: ['Need at least option_a and option_b columns'] }
+
+  const questions: Question[] = []
+  const errors: string[] = []
+
+  for (let r = 1; r < rows.length; r++) {
+    const row = rows[r]
+    const rowNum = r + 1 // 1-indexed, matching what a spreadsheet shows
+    const text = (row[idxText] || '').trim()
+    if (!text) { errors.push(`Row ${rowNum}: missing question_text`); continue }
+
+    const options = optionCols
+      .map(ci => (row[ci] || '').trim())
+      .filter(t => t !== '')
+
+    if (options.length < 2) { errors.push(`Row ${rowNum}: needs at least 2 non-empty options`); continue }
+
+    const correctRaw = idxCorrect !== -1 ? (row[idxCorrect] || '').trim().toLowerCase() : ''
+    let correctIndex = -1
+    if (/^[a-f]$/.test(correctRaw)) correctIndex = CSV_OPTION_LETTERS.indexOf(correctRaw)
+    else if (/^\d+$/.test(correctRaw)) correctIndex = parseInt(correctRaw, 10) - 1
+    else if (correctRaw) correctIndex = options.findIndex(o => o.toLowerCase() === correctRaw)
+
+    if (correctIndex < 0 || correctIndex >= options.length) {
+      errors.push(`Row ${rowNum}: correct_option "${row[idxCorrect] || ''}" doesn't match any option (use A, B, C…)`)
+      continue
+    }
+
+    questions.push({
+      question_text: text,
+      question_type: 'multiple_choice',
+      points: idxPoints !== -1 && row[idxPoints]?.trim() ? (parseInt(row[idxPoints], 10) || 1) : 1,
+      options: options.map((o, i) => ({ text: o, is_correct: i === correctIndex })),
+      explanation: idxExplanation !== -1 ? (row[idxExplanation] || '').trim() || undefined : undefined,
+    })
+  }
+
+  return { questions, errors }
+}
+
+const CSV_TEMPLATE = `question_text,option_a,option_b,option_c,option_d,correct_option,points,explanation
+"What is the normal resting heart rate range in a healthy adult?","40-60 bpm","60-100 bpm","100-140 bpm","140-180 bpm",B,1,"Normal adult resting heart rate is 60-100 bpm."
+"Which of these is a beta-blocker?","Amlodipine","Metoprolol","Furosemide","Losartan",B,1,""
+`
+
 export default function NewAssessmentPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -31,10 +126,13 @@ export default function NewAssessmentPage() {
   const [maxAttempts, setMaxAttempts] = useState(1)
   const [showCorrect, setShowCorrect] = useState(true)
   const [shuffle, setShuffle] = useState(false)
+  const [availableFrom, setAvailableFrom] = useState('')
   const [dueDate, setDueDate] = useState('')
   const [questions, setQuestions] = useState<Question[]>([])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [bulkError, setBulkError] = useState('')
+  const [bulkNotice, setBulkNotice] = useState('')
 
   const addQuestion = () => {
     setQuestions([...questions, {
@@ -79,6 +177,32 @@ export default function NewAssessmentPage() {
     setQuestions(newQuestions)
   }
 
+  const handleBulkFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setBulkError('')
+    setBulkNotice('')
+
+    const reader = new FileReader()
+    reader.onload = () => {
+      const text = String(reader.result || '')
+      const rows = parseCsv(text)
+      const { questions: parsed, errors } = questionsFromCsvRows(rows)
+
+      if (parsed.length > 0) {
+        setQuestions(prev => [...prev, ...parsed])
+        setBulkNotice(`Added ${parsed.length} question${parsed.length === 1 ? '' : 's'} from the file.`)
+      }
+      if (errors.length > 0) {
+        const shown = errors.slice(0, 8)
+        setBulkError(shown.join(' · ') + (errors.length > shown.length ? ` (+${errors.length - shown.length} more)` : ''))
+      }
+    }
+    reader.onerror = () => setBulkError('Could not read that file')
+    reader.readAsText(file)
+    e.target.value = ''
+  }
+
   const handleSave = async (publish: boolean = false) => {
     if (!title.trim()) {
       setError('Title is required')
@@ -108,6 +232,7 @@ export default function NewAssessmentPage() {
           max_attempts: maxAttempts,
           show_correct_answers: showCorrect,
           shuffle_questions: shuffle,
+          available_from: availableFrom || null,
           due_date: dueDate || null,
           questions
         })
@@ -239,6 +364,16 @@ export default function NewAssessmentPage() {
           </div>
 
           <div>
+            <label className="field-label">Available From (optional)</label>
+            <input
+              type="datetime-local"
+              value={availableFrom}
+              onChange={(e) => setAvailableFrom(e.target.value)}
+              className="input"
+            />
+          </div>
+
+          <div>
             <label className="field-label">Due Date (optional)</label>
             <input
               type="datetime-local"
@@ -248,6 +383,9 @@ export default function NewAssessmentPage() {
             />
           </div>
         </div>
+        <p style={{ fontSize: 11, color: 'var(--muted)', marginTop: 8 }}>
+          Leave "Available From" blank to open immediately once published. Leave "Due Date" blank for no deadline.
+        </p>
 
         <div style={{ display: 'flex', gap: 16, marginTop: 16 }}>
           <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer' }}>
@@ -269,6 +407,34 @@ export default function NewAssessmentPage() {
             Shuffle question order
           </label>
         </div>
+      </div>
+
+      {/* Bulk Upload */}
+      <div className="card card-pad" style={{ marginBottom: 20 }}>
+        <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 6 }}>Bulk Upload Questions</h3>
+        <p style={{ fontSize: 12.5, color: 'var(--muted)', marginBottom: 12 }}>
+          Upload a CSV with columns <code>question_text, option_a, option_b, option_c, option_d, correct_option, points, explanation</code>.
+          Use <code>correct_option</code> as the letter (A, B, C…) of the right answer. Only multiple-choice questions are supported via CSV.
+        </p>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          <label className="btn btn-secondary btn-sm" style={{ cursor: 'pointer' }}>
+            Choose CSV File
+            <input type="file" accept=".csv,text/csv" onChange={handleBulkFile} style={{ display: 'none' }} />
+          </label>
+          <a
+            href={`data:text/csv;charset=utf-8,${encodeURIComponent(CSV_TEMPLATE)}`}
+            download="question-template.csv"
+            className="btn btn-ghost btn-sm"
+          >
+            Download Template
+          </a>
+        </div>
+        {bulkNotice && (
+          <p style={{ fontSize: 12.5, color: 'var(--teal)', marginTop: 10 }}>{bulkNotice}</p>
+        )}
+        {bulkError && (
+          <p style={{ fontSize: 12.5, color: 'var(--danger)', marginTop: 10 }}>{bulkError}</p>
+        )}
       </div>
 
       {/* Questions */}

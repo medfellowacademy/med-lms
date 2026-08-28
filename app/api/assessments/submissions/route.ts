@@ -60,6 +60,24 @@ export async function POST(request: Request) {
     const body = await request.json()
     const { assessment_id } = body
 
+    // Enforce the exam's availability window (start time / due date) server-side —
+    // the DB's can_take_assessment() function only checks published + attempt count.
+    const { data: assessmentWindow } = await supabase
+      .from('assessments')
+      .select('available_from, due_date')
+      .eq('id', assessment_id)
+      .single()
+
+    if (assessmentWindow) {
+      const now = Date.now()
+      if (assessmentWindow.available_from && now < new Date(assessmentWindow.available_from).getTime()) {
+        return NextResponse.json({ error: 'This assessment is not open yet' }, { status: 403 })
+      }
+      if (assessmentWindow.due_date && now > new Date(assessmentWindow.due_date).getTime()) {
+        return NextResponse.json({ error: 'This assessment is closed' }, { status: 403 })
+      }
+    }
+
     // Check if can take assessment
     const { data: canTake } = await supabase.rpc('can_take_assessment', {
       assessment_id_param: assessment_id,

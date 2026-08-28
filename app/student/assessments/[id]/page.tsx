@@ -26,6 +26,7 @@ interface Assessment {
   show_correct_answers: boolean
   shuffle_questions: boolean
   due_date: string | null
+  available_from: string | null
 }
 
 interface Submission {
@@ -79,6 +80,21 @@ export default function TakeAssessmentPage({ params }: { params: Promise<{ id: s
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) {
         router.push('/login')
+        return
+      }
+
+      // Enforce the exam's availability window (start time / due date)
+      const now = Date.now()
+      if (assessmentData.available_from && now < new Date(assessmentData.available_from).getTime()) {
+        setCanTake(false)
+        setError(`This ${assessmentData.type} opens on ${new Date(assessmentData.available_from).toLocaleString()}.`)
+        setLoading(false)
+        return
+      }
+      if (assessmentData.due_date && now > new Date(assessmentData.due_date).getTime()) {
+        setCanTake(false)
+        setError(`This ${assessmentData.type} closed on ${new Date(assessmentData.due_date).toLocaleString()}.`)
+        setLoading(false)
         return
       }
 
