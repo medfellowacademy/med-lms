@@ -1,5 +1,7 @@
 import { redirect } from 'next/navigation'
-import { createServerSupabase, getCurrentUser } from '@/lib/supabase-server'
+import { createServerSupabase, createServiceSupabase, getCurrentUser } from '@/lib/supabase-server'
+import { getModuleProgress } from '@/lib/module-progress'
+import { getStudyStats } from '@/lib/student-stats'
 import DashboardClient from './DashboardClient'
 
 export default async function StudentDashboardPage() {
@@ -38,57 +40,50 @@ export default async function StudentDashboardPage() {
   ])
 
   const courses = (enrollments || []).map((e: any) => e.courses).filter(Boolean)
+  const serviceSupabase = createServiceSupabase()
 
-  // Calculate statistics for each course (courses run in parallel with each other)
-  const courseStats = await Promise.all(
-    courses.map(async (course: any) => {
-      // total/unlocked module counts are derived from this fetch, not separate queries
-      const { data: modules } = await supabase
-        .from('modules')
-        .select('id, is_locked')
-        .eq('course_id', course.id)
+  // Modules are read with the service client (like the course page) so locked modules still count
+  // toward totals; per-student unlock overrides are applied on top of the global lock.
+  const courseIds = courses.map((c: any) => c.id)
+  const { data: allModules } = courseIds.length
+    ? await serviceSupabase.from('modules').select('id, title, course_id, order_index, is_locked').in('course_id', courseIds).order('order_index')
+    : { data: [] as any[] }
+  const { data: overrides } = (allModules || []).length
+    ? await serviceSupabase.from('student_module_access').select('module_id, is_unlocked')
+        .eq('student_id', user.id).in('module_id', (allModules || []).map((m: any) => m.id))
+    : { data: [] as any[] }
+  const overrideMap = new Map((overrides || []).map((o: any) => [o.module_id, o.is_unlocked as boolean]))
+  const modulesAll = (allModules || []).map((m: any) => ({
+    ...m,
+    is_locked: overrideMap.has(m.id) ? !overrideMap.get(m.id) : m.is_locked,
+  }))
 
-      const moduleIds = (modules || []).map(m => m.id)
-      const totalModules = modules?.length || 0
-      const unlockedModules = (modules || []).filter(m => !m.is_locked).length
+  const progressByModule = await getModuleProgress(serviceSupabase, user.id, modulesAll.map((m: any) => m.id))
 
-      // Completed-modules count and content items are independent — fetch together
-      const [{ count: completedModulesCount }, { data: contentItems }] = await Promise.all([
-        moduleIds.length > 0
-          ? supabase.from('module_completion').select('*', { count: 'exact', head: true })
-              .eq('user_id', user.id).eq('completed', true).in('module_id', moduleIds)
-          : Promise.resolve({ count: 0 }),
-        supabase.from('module_content').select('id, type')
-          .in('module_id', moduleIds.length > 0 ? moduleIds : ['00000000-0000-0000-0000-000000000000']),
-      ])
-      const completedModules = completedModulesCount || 0
-
-      const videoContentIds = (contentItems || []).filter(c => c.type === 'video').map(c => c.id)
-      const totalVideos = videoContentIds.length
-
-      // Completed videos
-      let completedVideos = 0
-      if (videoContentIds.length > 0) {
-        const { count } = await supabase
-          .from('video_progress')
-          .select('*', { count: 'exact', head: true })
-          .eq('user_id', user.id)
-          .eq('completed', true)
-          .in('content_id', videoContentIds)
-        completedVideos = count || 0
-      }
-
-      return {
-        ...course,
-        totalModules,
-        unlockedModules,
-        completedModules,
-        totalVideos,
-        completedVideos,
-        progress: totalVideos ? Math.round((completedVideos || 0) / totalVideos * 100) : 0
-      }
-    })
-  )
+  const courseStats = courses.map((course: any) => {
+    const modules = modulesAll.filter((m: any) => m.course_id === course.id)
+    const all = modules.map((m: any) => progressByModule[m.id]).filter(Boolean)
+    const totalModules = modules.length
+    const completedModules = all.filter(p => p.completed).length
+    // Course progress = average of per-module progress so every module counts equally
+    const progress = totalModules ? Math.round(all.reduce((sum, p) => sum + p.percent, 0) / totalModules) : 0
+    return {
+      ...course,
+      totalModules,
+      unlockedModules: modules.filter((m: any) => !m.is_locked).length,
+      completedModules,
+      totalVideos: all.reduce((sum, p) => sum + p.videosTotal, 0),
+      completedVideos: all.reduce((sum, p) => sum + p.videosDone, 0),
+      progress,
+      modules: modules.map((m: any) => ({
+        id: m.id,
+        title: m.title,
+        order_index: m.order_index,
+        is_locked: m.is_locked,
+        completed: !!progressByModule[m.id]?.completed,
+      })),
+    }
+  })
 
   // Overall statistics
   const totalCourses = courses.length
@@ -97,12 +92,31 @@ export default async function StudentDashboardPage() {
   const totalModulesCompleted = courseStats.reduce((sum, c) => sum + c.completedModules, 0)
   const totalVideosWatched = courseStats.reduce((sum, c) => sum + c.completedVideos, 0)
 
+  const moduleToCourse: Record<string, string> = {}
+  for (const m of modulesAll) moduleToCourse[m.id] = m.course_id
+  const studyStats = await getStudyStats(serviceSupabase, user.id, moduleToCourse, {
+    modulesCompleted: totalModulesCompleted,
+    coursesCompleted: totalCompleted,
+  })
+
+  const courseStatsWithTime = courseStats.map(c => ({
+    ...c,
+    timeSpentSeconds: studyStats.courseTime[c.id]?.seconds || 0,
+    lastAccessedAt: studyStats.courseTime[c.id]?.lastAccessed || null,
+  }))
+
   return (
     <DashboardClient
       profile={profile}
-      courseStats={courseStats}
-      recentActivity={recentActivity || []}
+      courseStats={courseStatsWithTime}
+      recentActivity={recentActivity && recentActivity.length > 0 ? recentActivity : studyStats.recentActivity}
       continueWatching={continueWatching || []}
+      studyStats={{
+        currentStreak: studyStats.currentStreak,
+        longestStreak: studyStats.longestStreak,
+        totalStudyDays: studyStats.totalStudyDays,
+        achievements: studyStats.achievements,
+      }}
       overallStats={{
         totalCourses,
         totalCompleted,

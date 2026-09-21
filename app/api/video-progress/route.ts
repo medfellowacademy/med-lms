@@ -16,15 +16,26 @@ export async function POST(req: NextRequest) {
     if (parsed.error) return parsed.error
     const { content_id, watch_time_seconds, total_duration_seconds, completed } = parsed.data
 
-    // Upsert video progress
+    // Never let a later heartbeat un-complete a video or overwrite known values with zeros
+    // (the client's "ended" event reports 0/0, and re-watching reports completed=false).
+    const { data: existing } = await supabase
+      .from('video_progress')
+      .select('watch_time_seconds, total_duration_seconds, completed')
+      .eq('user_id', user.id)
+      .eq('content_id', content_id)
+      .maybeSingle()
+
+    const isCompleted = !!(completed || existing?.completed)
     const { data, error } = await supabase
       .from('video_progress')
       .upsert({
         user_id: user.id,
         content_id,
-        watch_time_seconds: watch_time_seconds || 0,
-        total_duration_seconds: total_duration_seconds || 0,
-        completed: completed || false,
+        watch_time_seconds: isCompleted && !watch_time_seconds
+          ? existing?.watch_time_seconds || 0
+          : watch_time_seconds || 0,
+        total_duration_seconds: total_duration_seconds || existing?.total_duration_seconds || 0,
+        completed: isCompleted,
         last_watched_at: new Date().toISOString()
       }, {
         onConflict: 'user_id,content_id'

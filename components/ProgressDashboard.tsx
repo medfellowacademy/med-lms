@@ -1,7 +1,5 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { createClient } from '@/lib/supabase'
 
 interface CourseProgress {
   course_id: string
@@ -26,83 +24,47 @@ interface Achievement {
   title: string
   description: string
   icon: string
-  category: string
   unlocked_at?: string
 }
 
-export default function ProgressDashboard() {
-  const supabase = createClient()
-  const [courseProgress, setCourseProgress] = useState<CourseProgress[]>([])
-  const [streak, setStreak] = useState<StudyStreak | null>(null)
-  const [achievements, setAchievements] = useState<Achievement[]>([])
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    loadProgress()
-  }, [])
-
-  async function loadProgress() {
-    try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
-
-      // Load course progress
-      const { data: progressData } = await supabase
-        .from('course_progress')
-        .select(`
-          *,
-          courses!inner(title)
-        `)
-        .eq('user_id', user.id)
-
-      if (progressData) {
-        const formattedProgress = progressData.map((p: any) => ({
-          course_id: p.course_id,
-          course_title: p.courses.title,
-          modules_completed: p.modules_completed,
-          total_modules: p.total_modules,
-          progress_percentage: p.progress_percentage,
-          total_time_spent_seconds: p.total_time_spent_seconds,
-          last_accessed_at: p.last_accessed_at
-        }))
-        setCourseProgress(formattedProgress)
-      }
-
-      // Load study streak
-      const { data: streakData } = await supabase
-        .from('study_streaks')
-        .select('*')
-        .eq('user_id', user.id)
-        .single()
-
-      if (streakData) setStreak(streakData)
-
-      // Load achievements (both unlocked and locked)
-      const [allAch, userAch] = await Promise.all([
-        supabase.from('achievements').select('*'),
-        supabase
-          .from('user_achievements')
-          .select('achievement_id, unlocked_at')
-          .eq('user_id', user.id)
-      ])
-
-      if (allAch.data) {
-        const unlockedIds = new Set(userAch.data?.map(a => a.achievement_id) || [])
-        const unlockedMap = new Map(userAch.data?.map(a => [a.achievement_id, a.unlocked_at]) || [])
-        
-        const formattedAch = allAch.data.map(ach => ({
-          ...ach,
-          unlocked_at: unlockedMap.get(ach.id)
-        }))
-        setAchievements(formattedAch)
-      }
-
-      setLoading(false)
-    } catch (error) {
-      console.error('Failed to load progress:', error)
-      setLoading(false)
-    }
+interface ProgressDashboardProps {
+  courses: {
+    id: string
+    title: string
+    completedModules: number
+    totalModules: number
+    progress: number
+    timeSpentSeconds: number
+    lastAccessedAt: string | null
+  }[]
+  studyStats: {
+    currentStreak: number
+    longestStreak: number
+    totalStudyDays: number
+    achievements: { id: string; code: string; title: string; description: string; icon: string; unlocked: boolean }[]
   }
+}
+
+export default function ProgressDashboard({ courses, studyStats }: ProgressDashboardProps) {
+  const courseProgress: CourseProgress[] = courses.map(c => ({
+    course_id: c.id,
+    course_title: c.title,
+    modules_completed: c.completedModules,
+    total_modules: c.totalModules,
+    progress_percentage: c.progress,
+    total_time_spent_seconds: c.timeSpentSeconds,
+    last_accessed_at: c.lastAccessedAt || ''
+  }))
+  const streak: StudyStreak = {
+    current_streak: studyStats.currentStreak,
+    longest_streak: studyStats.longestStreak,
+    total_study_days: studyStats.totalStudyDays,
+    last_activity_date: ''
+  }
+  const achievements: Achievement[] = studyStats.achievements.map(a => ({
+    ...a,
+    unlocked_at: a.unlocked ? 'unlocked' : undefined
+  }))
 
   function formatTime(seconds: number): string {
     const hours = Math.floor(seconds / 3600)
@@ -123,13 +85,6 @@ export default function ProgressDashboard() {
     return date.toLocaleDateString()
   }
 
-  if (loading) {
-    return (
-      <div style={{ padding: 24 }}>
-        <div style={{ color: 'var(--muted)', fontSize: 13 }}>Loading progress...</div>
-      </div>
-    )
-  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -203,7 +158,7 @@ export default function ProgressDashboard() {
                   <div>
                     <h4 style={{ fontSize: 14, fontWeight: 600 }}>{progress.course_title}</h4>
                     <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>
-                      Last accessed {formatDate(progress.last_accessed_at)}
+                      {progress.last_accessed_at ? `Last accessed ${formatDate(progress.last_accessed_at)}` : 'Not started yet'}
                     </p>
                   </div>
                   <div style={{ textAlign: 'right' }}>

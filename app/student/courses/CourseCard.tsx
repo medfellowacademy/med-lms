@@ -12,11 +12,13 @@ interface CourseCardProps {
   counts: {
     total: number
     unlocked: number
+    completed: number
+    percent: number
   }
 }
 
 export default function CourseCard({ course, counts }: CourseCardProps) {
-  const pct = counts.total === 0 ? 0 : Math.round((counts.unlocked / counts.total) * 100)
+  const pct = counts.percent
   return (
     <Link href={`/student/courses/${course.id}`} style={{ textDecoration: 'none' }}>
       <motion.div
@@ -61,7 +63,7 @@ export default function CourseCard({ course, counts }: CourseCardProps) {
 
         <div style={{ marginTop: 'auto' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11.5, marginBottom: 6 }}>
-            <span style={{ color: 'var(--muted)' }}>{counts.unlocked} of {counts.total} unlocked</span>
+            <span style={{ color: 'var(--muted)' }}>{counts.completed} of {counts.total} modules completed • {counts.unlocked} unlocked</span>
             <span style={{ color: 'var(--teal)', fontWeight: 600 }}>{pct}%</span>
           </div>
           <div className="progress">

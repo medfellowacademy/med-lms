@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
-import { createServerSupabase, getCurrentUser } from '@/lib/supabase-server'
+import { createServerSupabase, createServiceSupabase, getCurrentUser } from '@/lib/supabase-server'
+import { getModuleProgress } from '@/lib/module-progress'
 import CourseCard from './CourseCard'
 
 export default async function StudentCoursesPage() {
@@ -17,18 +18,26 @@ export default async function StudentCoursesPage() {
 
   // Count unlocked modules per course
   const courseIds = courses.map((c: any) => c.id)
-  const moduleCounts: Record<string, { total: number; unlocked: number }> = {}
+  const moduleCounts: Record<string, { total: number; unlocked: number; completed: number; percent: number }> = {}
 
   if (courseIds.length > 0) {
     const { data: mods } = await supabase
       .from('modules')
-      .select('course_id, is_locked')
+      .select('id, course_id, is_locked')
       .in('course_id', courseIds)
 
+    const progress = await getModuleProgress(createServiceSupabase(), user.id, (mods || []).map(m => m.id))
+    const percentSum: Record<string, number> = {}
+
     for (const mod of mods || []) {
-      if (!moduleCounts[mod.course_id]) moduleCounts[mod.course_id] = { total: 0, unlocked: 0 }
+      if (!moduleCounts[mod.course_id]) moduleCounts[mod.course_id] = { total: 0, unlocked: 0, completed: 0, percent: 0 }
       moduleCounts[mod.course_id].total++
       if (!mod.is_locked) moduleCounts[mod.course_id].unlocked++
+      if (progress[mod.id]?.completed) moduleCounts[mod.course_id].completed++
+      percentSum[mod.course_id] = (percentSum[mod.course_id] || 0) + (progress[mod.id]?.percent || 0)
+    }
+    for (const id of Object.keys(moduleCounts)) {
+      moduleCounts[id].percent = Math.round(percentSum[id] / moduleCounts[id].total)
     }
   }
 
@@ -62,7 +71,7 @@ export default async function StudentCoursesPage() {
       ) : (
         <div className="responsive-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
           {courses.map((course: any) => {
-            const counts = moduleCounts[course.id] || { total: 0, unlocked: 0 }
+            const counts = moduleCounts[course.id] || { total: 0, unlocked: 0, completed: 0, percent: 0 }
             return (
               <CourseCard
                 key={course.id}

@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+import type { ModuleProgress } from '@/lib/module-progress'
 
 interface Module {
   id: string
@@ -57,6 +59,7 @@ interface Props {
   contentBySubTopic: Record<string, ContentItem[]>
   videoUrls: Record<string, string>
   assessmentsByModule: Record<string, Assessment[]>
+  moduleProgress: Record<string, ModuleProgress>
 }
 
 export default function StudentCourseClient({ 
@@ -67,7 +70,8 @@ export default function StudentCourseClient({
   contentByModule, 
   contentBySubTopic,
   videoUrls,
-  assessmentsByModule
+  assessmentsByModule,
+  moduleProgress
 }: Props) {
   const firstUnlocked = modules.find(m => !m.is_locked)
   const [activeModule, setActiveModule] = useState<Module | null>(firstUnlocked || null)
@@ -96,7 +100,11 @@ export default function StudentCourseClient({
   })
 
   const unlockedCount = modules.filter(m => !m.is_locked).length
+  const completedCount = modules.filter(m => moduleProgress[m.id]?.completed).length
   const playerRef = useRef<any>(null)
+  const completedSent = useRef<Set<string>>(new Set())
+  const router = useRouter()
+  const [markingModule, setMarkingModule] = useState<string | null>(null)
 
   // Debug: Log video URLs
   useEffect(() => {
@@ -235,6 +243,28 @@ export default function StudentCourseClient({
     }
   }
 
+  // Save a finished video once, then refresh server data so module progress updates live
+  async function completeVideo(contentId: string, currentTime: number, duration: number) {
+    if (completedSent.current.has(contentId)) return
+    completedSent.current.add(contentId)
+    await trackVideoProgress(contentId, currentTime, duration, true)
+    router.refresh()
+  }
+
+  async function toggleModuleComplete(moduleId: string, completed: boolean) {
+    setMarkingModule(moduleId)
+    try {
+      await fetch('/api/completion', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ module_id: moduleId, completed })
+      })
+      router.refresh()
+    } finally {
+      setMarkingModule(null)
+    }
+  }
+
   // Log activity
   async function logActivity(type: string, contentId?: string, moduleId?: string, subTopicId?: string) {
     try {
@@ -312,7 +342,7 @@ export default function StudentCourseClient({
           <svg width="11" height="11" viewBox="0 0 20 20" fill="currentColor">
             <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
           </svg>
-          {unlockedCount} / {modules.length} unlocked
+          {completedCount} / {modules.length} completed • {unlockedCount} unlocked
         </div>
       </div>
 
@@ -379,7 +409,11 @@ export default function StudentCourseClient({
                       {mod.title}
                     </p>
                   </div>
-                  {mod.is_locked ? (
+                  {!mod.is_locked && moduleProgress[mod.id]?.completed ? (
+                    <svg width="14" height="14" viewBox="0 0 20 20" fill="#10b981" aria-label="Module completed">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                    </svg>
+                  ) : mod.is_locked ? (
                     <svg width="12" height="12" viewBox="0 0 20 20" fill="#d1d5db">
                       <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
                     </svg>
@@ -453,12 +487,25 @@ export default function StudentCourseClient({
                       const vids = items.filter(i => i.type === 'video').length
                       const audios = items.filter(i => i.type === 'audio').length
                       const docs = items.filter(i => i.type === 'ppt' || i.type === 'pdf' || i.type === 'document').length
+                      const mp = moduleProgress[mod.id]
                       return (
                         <>
-                          {vids > 0 && <span>{vids} video{vids !== 1 ? 's' : ''}</span>}
-                          {audios > 0 && <span>{audios} audio{audios !== 1 ? 's' : ''}</span>}
-                          {docs > 0 && <span>{docs} doc{docs !== 1 ? 's' : ''}</span>}
-                          {items.length === 0 && <span>No content yet</span>}
+                          {mp?.completed ? (
+                            <span style={{ color: '#059669', fontWeight: 600 }}>✓ Completed</span>
+                          ) : mp && mp.videosTotal + mp.assessmentsTotal > 0 ? (
+                            <span style={{ color: 'var(--teal)', fontWeight: 500 }}>
+                              {mp.videosTotal > 0 && `${mp.videosDone}/${mp.videosTotal} videos`}
+                              {mp.videosTotal > 0 && mp.assessmentsTotal > 0 && ' • '}
+                              {mp.assessmentsTotal > 0 && `${mp.assessmentsDone}/${mp.assessmentsTotal} exams`}
+                            </span>
+                          ) : (
+                            <>
+                              {vids > 0 && <span>{vids} video{vids !== 1 ? 's' : ''}</span>}
+                              {audios > 0 && <span>{audios} audio{audios !== 1 ? 's' : ''}</span>}
+                              {docs > 0 && <span>{docs} doc{docs !== 1 ? 's' : ''}</span>}
+                              {items.length === 0 && <span>No content yet</span>}
+                            </>
+                          )}
                         </>
                       )
                     })()}
@@ -572,13 +619,13 @@ export default function StudentCourseClient({
                         if (Math.floor(currentTime) % 10 === 0 && currentTime > 0) {
                           trackVideoProgress(activeVideo.id, currentTime, duration, false)
                         }
-                        if (currentTime / duration > 0.9) {
-                          trackVideoProgress(activeVideo.id, currentTime, duration, true)
+                        if (duration > 0 && currentTime / duration > 0.9 && !completedSent.current.has(activeVideo.id)) {
+                          completeVideo(activeVideo.id, currentTime, duration)
                         }
                       }}
                       onEnded={() => {
                         if (activeVideo) {
-                          trackVideoProgress(activeVideo.id, 0, 0, true)
+                          completeVideo(activeVideo.id, 0, 0)
                           localStorage.removeItem(`video_${activeVideo.id}`)
                         }
                       }}
@@ -958,6 +1005,41 @@ export default function StudentCourseClient({
                   })}
                 </div>
               )}
+
+              {/* Module completion — auto-tracked from videos/exams; resource-only modules are self-marked */}
+              {activeModule && moduleProgress[activeModule.id] && (() => {
+                const mp = moduleProgress[activeModule.id]
+                const trackable = mp.videosTotal + mp.assessmentsTotal > 0
+                if (!trackable && !mp.completed && (contentByModule[activeModule.id] || []).length === 0 && !activeSubTopic) return null
+                return (
+                  <div style={{
+                    background: mp.completed ? 'var(--success-bg)' : 'var(--white)',
+                    border: `1px solid ${mp.completed ? '#bbf7d0' : 'var(--border)'}`,
+                    borderRadius: 8, padding: '12px 16px',
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap'
+                  }}>
+                    <div style={{ minWidth: 0 }}>
+                      <p style={{ fontSize: 13, fontWeight: 600, color: mp.completed ? '#15803d' : 'var(--text)' }}>
+                        {mp.completed ? '✓ Module completed' : 'Module progress'}
+                      </p>
+                      <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>
+                        {trackable
+                          ? `${mp.videosTotal > 0 ? `${mp.videosDone}/${mp.videosTotal} videos watched` : ''}${mp.videosTotal > 0 && mp.assessmentsTotal > 0 ? ' • ' : ''}${mp.assessmentsTotal > 0 ? `${mp.assessmentsDone}/${mp.assessmentsTotal} exams submitted` : ''}`
+                          : 'This module has reading material only.'}
+                      </p>
+                    </div>
+                    {(!trackable || mp.manuallyCompleted) && (
+                      <button
+                        onClick={() => toggleModuleComplete(activeModule.id, !mp.completed)}
+                        disabled={markingModule === activeModule.id}
+                        className={mp.completed ? 'btn btn-ghost btn-sm' : 'btn btn-primary btn-sm'}
+                      >
+                        {markingModule === activeModule.id ? '…' : mp.completed ? 'Undo' : 'Mark as complete'}
+                      </button>
+                    )}
+                  </div>
+                )
+              })()}
 
               {/* Assessments */}
               {assessments.length > 0 && (

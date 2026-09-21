@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createServerSupabase, createServiceSupabase, getCurrentUser } from '@/lib/supabase-server'
 import StudentCourseClient from './StudentCourseClient'
+import { getModuleProgress } from '@/lib/module-progress'
 
 export default async function StudentCoursePage({ params }: { params: Promise<{ id: string }> }) {
   const { id: courseId } = await params
@@ -101,6 +102,8 @@ export default async function StudentCoursePage({ params }: { params: Promise<{ 
     }
   }
 
+  const moduleProgress = await getModuleProgress(serviceSupabase, user.id, accessibleModuleIds)
+
   return (
     <StudentCourseClient
       course={course}
@@ -111,6 +114,7 @@ export default async function StudentCoursePage({ params }: { params: Promise<{ 
       contentBySubTopic={contentBySubTopic}
       videoUrls={videoUrls}
       assessmentsByModule={assessmentsByModule}
+      moduleProgress={moduleProgress}
     />
   )
 }
