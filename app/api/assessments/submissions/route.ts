@@ -120,6 +120,8 @@ export async function POST(request: Request) {
 }
 
 // PATCH - Update submission (save answers, submit, or grade)
+// Students may only save answers on their own in-progress attempt and submit it; scores,
+// status and pass/fail are never taken from a student's request body. Grading is admin-only.
 export async function PATCH(request: Request) {
   try {
     const supabase = await createServerSupabase()
@@ -129,60 +131,82 @@ export async function PATCH(request: Request) {
     }
 
     const body = await request.json()
-    const { id, action, ...updates } = body
+    const { id, action } = body
 
     if (!id) {
       return NextResponse.json({ error: 'Submission ID required' }, { status: 400 })
     }
 
-    // Handle submission
-    if (action === 'submit') {
-      updates.submitted_at = new Date().toISOString()
-      updates.status = 'submitted'
-      
-      // Auto-grade if possible
-      const { data: result } = await supabase.rpc('auto_grade_submission', {
-        submission_id_param: id
-      })
+    const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
+    const isAdmin = profile?.role === 'admin'
 
-      if (result && !result.error) {
-        // Check if passed
-        const { data: assessment } = await supabase
-          .from('assessments')
-          .select('passing_score')
-          .eq('id', updates.assessment_id || (await supabase.from('student_submissions').select('assessment_id').eq('id', id).single()).data?.assessment_id)
-          .single()
+    const { data: existing } = await supabase
+      .from('student_submissions')
+      .select('id, user_id, assessment_id, status')
+      .eq('id', id)
+      .single()
 
-        if (assessment && result.percentage >= assessment.passing_score) {
-          updates.passed = true
-        }
-      }
+    if (!existing) {
+      return NextResponse.json({ error: 'Submission not found' }, { status: 404 })
     }
+
+    const updates: Record<string, any> = {}
 
     // Handle grading by instructor
     if (action === 'grade') {
+      if (!isAdmin) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+      }
+      for (const key of ['score', 'max_score', 'percentage', 'feedback', 'question_feedback']) {
+        if (body[key] !== undefined) updates[key] = body[key]
+      }
       updates.graded_by = user.id
       updates.graded_at = new Date().toISOString()
       updates.status = 'graded'
-      
-      // Get passing score from assessment
-      const { data: submissionData } = await supabase
-        .from('student_submissions')
-        .select('assessment_id')
-        .eq('id', id)
+
+      const { data: assessmentData } = await supabase
+        .from('assessments')
+        .select('passing_score')
+        .eq('id', existing.assessment_id)
         .single()
 
-      if (submissionData) {
-        const { data: assessmentData } = await supabase
-          .from('assessments')
-          .select('passing_score')
-          .eq('id', submissionData.assessment_id)
-          .single()
+      updates.passed = !!assessmentData && updates.percentage >= assessmentData.passing_score
+    } else {
+      if (existing.user_id !== user.id) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+      }
+      if (existing.status !== 'in_progress') {
+        return NextResponse.json({ error: 'This attempt has already been submitted' }, { status: 409 })
+      }
 
-        if (assessmentData && updates.percentage >= assessmentData.passing_score) {
-          updates.passed = true
-        } else {
-          updates.passed = false
+      if (body.answers !== undefined) updates.answers = body.answers
+
+      if (action === 'submit') {
+        if (body.time_spent_seconds !== undefined) updates.time_spent_seconds = body.time_spent_seconds
+
+        // Persist the final answers first so auto-grading sees them
+        if (updates.answers !== undefined) {
+          await supabase.from('student_submissions').update({ answers: updates.answers }).eq('id', id)
+        }
+
+        updates.submitted_at = new Date().toISOString()
+        updates.status = 'submitted'
+
+        // Auto-grade if possible
+        const { data: result } = await supabase.rpc('auto_grade_submission', {
+          submission_id_param: id
+        })
+
+        if (result && !result.error) {
+          const { data: assessment } = await supabase
+            .from('assessments')
+            .select('passing_score')
+            .eq('id', existing.assessment_id)
+            .single()
+
+          if (assessment && result.percentage >= assessment.passing_score) {
+            updates.passed = true
+          }
         }
       }
     }

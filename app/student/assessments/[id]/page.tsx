@@ -134,13 +134,11 @@ export default function TakeAssessmentPage({ params }: { params: Promise<{ id: s
       }
 
       // Get questions
-      const { data: questionsData } = await supabase
-        .from('assessment_questions')
-        .select('*')
-        .eq('assessment_id', assessmentId)
-        .order('order_index')
+      // Served by the API without answer fields (students can't read assessment_questions directly)
+      const questionsRes = await fetch(`/api/assessments/questions?assessment_id=${assessmentId}`)
+      const questionsData = questionsRes.ok ? (await questionsRes.json()).questions : []
 
-      const loadedQuestions = questionsData || []
+      const loadedQuestions: Question[] = questionsData || []
       
       // Shuffle if needed
       if (assessmentData.shuffle_questions && !existingSubmission) {

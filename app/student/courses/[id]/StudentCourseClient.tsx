@@ -106,15 +106,6 @@ export default function StudentCourseClient({
   const router = useRouter()
   const [markingModule, setMarkingModule] = useState<string | null>(null)
 
-  // Debug: Log video URLs
-  useEffect(() => {
-    console.log('Video URLs:', videoUrls)
-    console.log('Active Video:', activeVideo)
-    if (activeVideo) {
-      console.log('Active Video URL:', videoUrls[activeVideo.id])
-    }
-  }, [activeVideo, videoUrls])
-
   // Load notes and bookmarks when active video changes
   useEffect(() => {
     if (activeVideo) {

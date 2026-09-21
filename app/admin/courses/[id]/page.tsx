@@ -517,7 +517,7 @@ export default function AdminCoursePage({ params }: { params: Promise<{ id: stri
                             <svg width="12" height="12" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd"/></svg>
                           </button>
                           <button onClick={() => setExpanded(isExpanded ? null : mod.id)} className="btn btn-ghost btn-sm">
-                            {isExpanded ? 'Hide' : 'Content'}
+                            {isExpanded ? 'Hide' : `Content & Preview (${modContent.length})`}
                           </button>
                           <button
                             onClick={() => router.push(`/admin/courses/${courseId}/modules/${mod.id}/subtopics`)}

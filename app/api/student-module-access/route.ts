@@ -1,9 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabase } from '@/lib/supabase-server'
 
+// These routes manage per-student module unlocks — admin only
+async function requireAdmin(supabase: Awaited<ReturnType<typeof createServerSupabase>>) {
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
+  if (profile?.role !== 'admin') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  return null
+}
+
 // GET /api/student-module-access?course_id=...&student_id=...
 export async function GET(req: NextRequest) {
   const supabase = await createServerSupabase()
+  const denied = await requireAdmin(supabase)
+  if (denied) return denied
   const { searchParams } = new URL(req.url)
   const courseId = searchParams.get('course_id')
   const studentId = searchParams.get('student_id')
@@ -33,6 +44,8 @@ export async function GET(req: NextRequest) {
 // body: { student_id, module_id, is_unlocked }
 export async function POST(req: NextRequest) {
   const supabase = await createServerSupabase()
+  const denied = await requireAdmin(supabase)
+  if (denied) return denied
   const { student_id, module_id, is_unlocked } = await req.json()
 
   const { error } = await supabase
@@ -47,6 +60,8 @@ export async function POST(req: NextRequest) {
 // Removes override — module falls back to global is_locked
 export async function DELETE(req: NextRequest) {
   const supabase = await createServerSupabase()
+  const denied = await requireAdmin(supabase)
+  if (denied) return denied
   const { searchParams } = new URL(req.url)
   const studentId = searchParams.get('student_id')
   const moduleId = searchParams.get('module_id')
