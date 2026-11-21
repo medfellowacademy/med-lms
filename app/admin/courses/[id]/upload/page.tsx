@@ -152,6 +152,22 @@ export default function UploadPage({ params }: { params: Promise<{ id: string }>
       return
     }
 
+    // Chrome aborts an upload with ERR_UPLOAD_FILE_CHANGED if the file was modified, moved or
+    // locked after it was picked. Reading the first and last byte fails fast in that case, so
+    // we can ask for a re-select instead of failing after a long upload starts.
+    try {
+      await file.slice(0, 1).arrayBuffer()
+      if (file.size > 1) await file.slice(file.size - 1).arrayBuffer()
+    } catch {
+      setError(
+        'This file changed or became unreadable after you selected it. This usually happens when the video is still being exported/copied, is inside a OneDrive or Google Drive sync folder, or was overwritten. Copy it to a local folder (e.g. C:\\Videos), wait until it finishes saving, then choose it again.'
+      )
+      setFile(null)
+      const input = document.getElementById('file-input') as HTMLInputElement | null
+      if (input) input.value = ''
+      return
+    }
+
     setUploading(true)
     setError('')
     setSuccess(false)
@@ -168,7 +184,17 @@ export default function UploadPage({ params }: { params: Promise<{ id: string }>
       .upload(storagePath, file)
 
     if (storageError) {
-      setError('Upload failed: ' + storageError.message)
+      const interrupted = /failed to fetch|networkerror|load failed|aborted/i.test(storageError.message)
+      setError(
+        interrupted
+          ? 'Upload was interrupted — the connection dropped or the file changed on disk during upload. Choose the file again and retry; for large videos use a stable connection and keep the file in a local folder, not a synced one.'
+          : 'Upload failed: ' + storageError.message
+      )
+      if (interrupted) {
+        setFile(null)
+        const input = document.getElementById('file-input') as HTMLInputElement | null
+        if (input) input.value = ''
+      }
       setUploading(false)
       setProgress(0)
       return
