@@ -76,7 +76,7 @@ export default function UploadPage({ params }: { params: Promise<{ id: string }>
   }, [selectedModule])
 
   const acceptMap = {
-    video: 'video/*',
+    video: 'video/mp4',
     ppt: '.ppt,.pptx,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation',
     pdf: 'application/pdf',
     audio: 'audio/*',
@@ -95,9 +95,9 @@ export default function UploadPage({ params }: { params: Promise<{ id: string }>
   const MAX_FILE_SIZE = {
     video: 5 * 1024 * 1024 * 1024, // 5GB for videos
     ppt: 100 * 1024 * 1024,    // 100MB for presentations
-    pdf: 50 * 1024 * 1024,     // 50MB for PDFs
+    pdf: 1 * 1024 * 1024 * 1024,     // 1GB for PDFs
     audio: 100 * 1024 * 1024,  // 100MB for audio
-    document: 50 * 1024 * 1024, // 50MB for documents
+    document: 1 * 1024 * 1024 * 1024, // 1GB for documents
   }
 
   function validateFile(file: File, type: 'video' | 'ppt' | 'pdf' | 'audio' | 'document'): string | null {
@@ -111,8 +111,12 @@ export default function UploadPage({ params }: { params: Promise<{ id: string }>
     }
 
     // Check file type
+    // Video is MP4-only: it's the one format that plays on every device (iPhone,
+    // Android, Windows, Mac, Linux) without exception. MOV/WebM/AVI/MKV each fail
+    // to play on at least one major platform, so they're rejected here rather than
+    // silently producing a broken player for some students.
     const validTypes = {
-      video: ['video/mp4', 'video/quicktime', 'video/x-msvideo', 'video/avi', 'video/webm'],
+      video: ['video/mp4'],
       ppt: [
         'application/vnd.ms-powerpoint',
         'application/vnd.openxmlformats-officedocument.presentationml.presentation'
@@ -127,6 +131,9 @@ export default function UploadPage({ params }: { params: Promise<{ id: string }>
     }
 
     if (!validTypes[type].includes(file.type)) {
+      if (type === 'video') {
+        return 'Only MP4 videos are supported. MP4 is the one format that plays on every device — please convert your video to MP4 before uploading (e.g. iPhone Photos app → Share → "Most Compatible" export).'
+      }
       return `Invalid file type. Please upload a valid ${type.toUpperCase()} file.`
     }
 
@@ -142,6 +149,22 @@ export default function UploadPage({ params }: { params: Promise<{ id: string }>
     const validationError = validateFile(file, contentType)
     if (validationError) {
       setError(validationError)
+      return
+    }
+
+    // Chrome aborts an upload with ERR_UPLOAD_FILE_CHANGED if the file was modified, moved or
+    // locked after it was picked. Reading the first and last byte fails fast in that case, so
+    // we can ask for a re-select instead of failing after a long upload starts.
+    try {
+      await file.slice(0, 1).arrayBuffer()
+      if (file.size > 1) await file.slice(file.size - 1).arrayBuffer()
+    } catch {
+      setError(
+        'This file changed or became unreadable after you selected it. This usually happens when the video is still being exported/copied, is inside a OneDrive or Google Drive sync folder, or was overwritten. Copy it to a local folder (e.g. C:\\Videos), wait until it finishes saving, then choose it again.'
+      )
+      setFile(null)
+      const input = document.getElementById('file-input') as HTMLInputElement | null
+      if (input) input.value = ''
       return
     }
 
@@ -161,7 +184,17 @@ export default function UploadPage({ params }: { params: Promise<{ id: string }>
       .upload(storagePath, file)
 
     if (storageError) {
-      setError('Upload failed: ' + storageError.message)
+      const interrupted = /failed to fetch|networkerror|load failed|aborted/i.test(storageError.message)
+      setError(
+        interrupted
+          ? 'Upload was interrupted — the connection dropped or the file changed on disk during upload. Choose the file again and retry; for large videos use a stable connection and keep the file in a local folder, not a synced one.'
+          : 'Upload failed: ' + storageError.message
+      )
+      if (interrupted) {
+        setFile(null)
+        const input = document.getElementById('file-input') as HTMLInputElement | null
+        if (input) input.value = ''
+      }
       setUploading(false)
       setProgress(0)
       return
@@ -421,7 +454,7 @@ export default function UploadPage({ params }: { params: Promise<{ id: string }>
                       Click to choose a {contentType === 'video' ? 'video' : contentType.toUpperCase()} file
                     </p>
                     <p style={{ fontSize: 11, color: '#9ca3af', marginTop: 4 }}>
-                      {contentType === 'video' ? 'MP4, MOV, AVI' : contentType === 'ppt' ? 'PPT, PPTX' : 'PDF'} · Max {MAX_FILE_SIZE[contentType] >= 1024 * 1024 * 1024 ? `${MAX_FILE_SIZE[contentType] / 1024 / 1024 / 1024}GB` : `${MAX_FILE_SIZE[contentType] / 1024 / 1024}MB`}
+                      {contentType === 'video' ? 'MP4 only (plays on every device)' : contentType === 'ppt' ? 'PPT, PPTX' : 'PDF'} · Max {MAX_FILE_SIZE[contentType] >= 1024 * 1024 * 1024 ? `${MAX_FILE_SIZE[contentType] / 1024 / 1024 / 1024}GB` : `${MAX_FILE_SIZE[contentType] / 1024 / 1024}MB`}
                     </p>
                   </div>
                 )}

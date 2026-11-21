@@ -1,20 +1,13 @@
 import { redirect } from 'next/navigation'
-import { createServerSupabase } from '@/lib/supabase-server'
+import { getCurrentUser, getCurrentProfile } from '@/lib/supabase-server'
 import Sidebar from '@/components/Sidebar'
 import NotificationCenter from '@/components/NotificationCenter'
 
 export default async function StudentLayout({ children }: { children: React.ReactNode }) {
-  const supabase = await createServerSupabase()
-  const { data: { user } } = await supabase.auth.getUser()
-
+  const user = await getCurrentUser()
   if (!user) redirect('/login')
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('role, full_name, email')
-    .eq('id', user.id)
-    .single()
-
+  const profile = await getCurrentProfile()
   if (!profile) redirect('/login')
 
   // Admins can also view student area, but redirect them to admin by default

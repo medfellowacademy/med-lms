@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import PreviewModal from '@/components/PreviewModal'
 import CreateAnnouncementModal from '@/components/CreateAnnouncementModal'
+import StudentModuleAccessModal from '@/components/StudentModuleAccessModal'
 
 interface Module {
   id: string
@@ -38,6 +39,72 @@ interface Assessment {
   due_date: string | null
 }
 
+function EditableText({ value, onSave, textStyle }: {
+  value: string
+  onSave: (next: string) => Promise<void>
+  textStyle?: React.CSSProperties
+}) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(value)
+  const [saving, setSaving] = useState(false)
+
+  if (editing) {
+    return (
+      <form
+        onSubmit={async e => {
+          e.preventDefault()
+          const trimmed = draft.trim()
+          if (!trimmed || trimmed === value) { setEditing(false); return }
+          setSaving(true)
+          await onSave(trimmed)
+          setSaving(false)
+          setEditing(false)
+        }}
+        onClick={e => e.stopPropagation()}
+        style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}
+      >
+        <input
+          autoFocus
+          value={draft}
+          onChange={e => setDraft(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Escape') { setDraft(value); setEditing(false) } }}
+          className="input"
+          style={{ fontSize: 13, padding: '4px 8px' }}
+        />
+        <button type="submit" disabled={saving} className="btn btn-primary btn-sm" style={{ padding: '3px 8px' }}>
+          {saving ? '…' : 'Save'}
+        </button>
+        <button
+          type="button"
+          onClick={() => { setDraft(value); setEditing(false) }}
+          className="btn btn-ghost btn-sm"
+          style={{ padding: '3px 8px' }}
+        >
+          Cancel
+        </button>
+      </form>
+    )
+  }
+
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+      <span style={textStyle}>{value}</span>
+      <button
+        type="button"
+        onClick={e => { e.stopPropagation(); setDraft(value); setEditing(true) }}
+        className="btn btn-ghost btn-sm"
+        aria-label="Edit name"
+        title="Edit name"
+        style={{ padding: '2px 5px', flexShrink: 0 }}
+      >
+        <svg width="11" height="11" viewBox="0 0 20 20" fill="currentColor">
+          <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+        </svg>
+      </button>
+    </span>
+  )
+}
+
 export default function AdminCoursePage({ params }: { params: Promise<{ id: string }> }) {
   const { id: courseId } = use(params)
   const router = useRouter()
@@ -57,6 +124,7 @@ export default function AdminCoursePage({ params }: { params: Promise<{ id: stri
   const [announcementModalOpen, setAnnouncementModalOpen] = useState(false)
   const [allCourses, setAllCourses] = useState<{ id: string; title: string }[]>([])
   const [reorderingModule, setReorderingModule] = useState<string | null>(null)
+  const [studentAccessOpen, setStudentAccessOpen] = useState(false)
   const [previewModal, setPreviewModal] = useState<{
     isOpen: boolean
     title: string
@@ -150,6 +218,26 @@ export default function AdminCoursePage({ params }: { params: Promise<{ id: stri
     load()
   }
 
+  async function renameCourse(title: string) {
+    await supabase.from('courses').update({ title }).eq('id', courseId)
+    load()
+  }
+
+  async function renameModule(id: string, title: string) {
+    await supabase.from('modules').update({ title }).eq('id', id)
+    load()
+  }
+
+  async function renameContent(id: string, title: string) {
+    await supabase.from('module_content').update({ title }).eq('id', id)
+    load()
+  }
+
+  async function renameEbook(id: string, title: string) {
+    await supabase.from('course_ebooks').update({ title }).eq('id', id)
+    load()
+  }
+
   async function deleteModule(id: string) {
     if (!confirm('Delete this module and all its content?')) return
     await supabase.from('modules').delete().eq('id', id)
@@ -162,7 +250,19 @@ export default function AdminCoursePage({ params }: { params: Promise<{ id: stri
   }
 
   async function previewContent(item: Content) {
-    // Get signed URL from Supabase storage
+    // Video/audio go through our same-origin streaming proxy (/api/stream) instead of a
+    // direct cross-origin Supabase URL — Safari/WebKit hangs indefinitely on cross-origin
+    // Range-based media without the right CORS headers exposed, while Chrome tolerates it.
+    if (item.type === 'video') {
+      setPreviewModal({
+        isOpen: true,
+        title: item.title,
+        type: item.type,
+        url: `/api/stream/${item.id}`,
+      })
+      return
+    }
+
     const { data } = await supabase.storage
       .from('medfellow-content')
       .createSignedUrl(item.storage_path, 3600) // 1 hour expiry
@@ -222,18 +322,38 @@ export default function AdminCoursePage({ params }: { params: Promise<{ id: stri
           Back
         </button>
         <div style={{ minWidth: 0, flex: 1 }}>
-          <h1 className="page-title" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {loading ? '…' : courseName}
+          <h1 className="page-title" style={{ overflow: 'hidden' }}>
+            {loading ? '…' : (
+              <EditableText
+                value={courseName}
+                onSave={renameCourse}
+                textStyle={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+              />
+            )}
           </h1>
           <p className="page-subtitle">Modules, sub-topics, content and course e-books</p>
         </div>
-        <button 
+        <button
+          onClick={() => setStudentAccessOpen(true)}
+          className="btn btn-sm"
+          style={{ background: '#eff6ff', color: '#1d4ed8', borderColor: '#bfdbfe' }}
+        >
+          👤 Student Access
+        </button>
+        <button
           onClick={() => setAnnouncementModalOpen(true)}
           className="btn btn-primary btn-sm"
         >
           📢 Create Announcement
         </button>
       </div>
+
+      <StudentModuleAccessModal
+        open={studentAccessOpen}
+        onClose={() => setStudentAccessOpen(false)}
+        courseId={courseId}
+        modules={modules}
+      />
 
       <CreateAnnouncementModal
         open={announcementModalOpen}
@@ -301,7 +421,11 @@ export default function AdminCoursePage({ params }: { params: Promise<{ id: stri
                           PDF
                         </div>
                         <div style={{ minWidth: 0 }}>
-                          <p style={{ fontSize: 13, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ebook.title}</p>
+                          <EditableText
+                            value={ebook.title}
+                            onSave={title => renameEbook(ebook.id, title)}
+                            textStyle={{ fontSize: 13, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                          />
                           <p style={{ fontSize: 11, color: 'var(--muted)' }}>Course-level e-book</p>
                         </div>
                       </div>
@@ -356,7 +480,11 @@ export default function AdminCoursePage({ params }: { params: Promise<{ id: stri
                           {mod.order_index + 1}
                         </div>
                         <div style={{ flex: 1, minWidth: 160 }}>
-                          <p style={{ fontSize: 14, fontWeight: 600 }}>{mod.title}</p>
+                          <EditableText
+                            value={mod.title}
+                            onSave={title => renameModule(mod.id, title)}
+                            textStyle={{ fontSize: 14, fontWeight: 600 }}
+                          />
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4, flexWrap: 'wrap' }}>
                             <span style={{ fontSize: 11.5, color: 'var(--muted)' }}>
                               {modContent.length} item{modContent.length !== 1 ? 's' : ''} • {modAssessments.length} assessment{modAssessments.length !== 1 ? 's' : ''}
@@ -389,7 +517,7 @@ export default function AdminCoursePage({ params }: { params: Promise<{ id: stri
                             <svg width="12" height="12" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd"/></svg>
                           </button>
                           <button onClick={() => setExpanded(isExpanded ? null : mod.id)} className="btn btn-ghost btn-sm">
-                            {isExpanded ? 'Hide' : 'Content'}
+                            {isExpanded ? 'Hide' : `Content & Preview (${modContent.length})`}
                           </button>
                           <button
                             onClick={() => router.push(`/admin/courses/${courseId}/modules/${mod.id}/subtopics`)}
@@ -462,7 +590,11 @@ export default function AdminCoursePage({ params }: { params: Promise<{ id: stri
                                       }}>
                                         {icon.label}
                                       </div>
-                                      <span style={{ fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.title}</span>
+                                      <EditableText
+                                        value={item.title}
+                                        onSave={title => renameContent(item.id, title)}
+                                        textStyle={{ fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                                      />
                                     </div>
                                     <div style={{ display: 'flex', gap: 6 }}>
                                       <button onClick={() => previewContent(item)} className="btn btn-secondary btn-sm">

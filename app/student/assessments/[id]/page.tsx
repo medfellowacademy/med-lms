@@ -26,6 +26,7 @@ interface Assessment {
   show_correct_answers: boolean
   shuffle_questions: boolean
   due_date: string | null
+  available_from: string | null
 }
 
 interface Submission {
@@ -82,6 +83,21 @@ export default function TakeAssessmentPage({ params }: { params: Promise<{ id: s
         return
       }
 
+      // Enforce the exam's availability window (start time / due date)
+      const now = Date.now()
+      if (assessmentData.available_from && now < new Date(assessmentData.available_from).getTime()) {
+        setCanTake(false)
+        setError(`This ${assessmentData.type} opens on ${new Date(assessmentData.available_from).toLocaleString()}.`)
+        setLoading(false)
+        return
+      }
+      if (assessmentData.due_date && now > new Date(assessmentData.due_date).getTime()) {
+        setCanTake(false)
+        setError(`This ${assessmentData.type} closed on ${new Date(assessmentData.due_date).toLocaleString()}.`)
+        setLoading(false)
+        return
+      }
+
       const { data: canTakeData } = await supabase.rpc('can_take_assessment', {
         assessment_id_param: assessmentId,
         user_id_param: user.id
@@ -118,13 +134,11 @@ export default function TakeAssessmentPage({ params }: { params: Promise<{ id: s
       }
 
       // Get questions
-      const { data: questionsData } = await supabase
-        .from('assessment_questions')
-        .select('*')
-        .eq('assessment_id', assessmentId)
-        .order('order_index')
+      // Served by the API without answer fields (students can't read assessment_questions directly)
+      const questionsRes = await fetch(`/api/assessments/questions?assessment_id=${assessmentId}`)
+      const questionsData = questionsRes.ok ? (await questionsRes.json()).questions : []
 
-      const loadedQuestions = questionsData || []
+      const loadedQuestions: Question[] = questionsData || []
       
       // Shuffle if needed
       if (assessmentData.shuffle_questions && !existingSubmission) {

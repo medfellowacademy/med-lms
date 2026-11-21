@@ -11,7 +11,8 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json()
-    const { module_id, sub_topic_id, completed } = body
+    const { module_id, sub_topic_id } = body
+    const completed: boolean = body.completed !== undefined ? !!body.completed : true
 
     if (!module_id && !sub_topic_id) {
       return NextResponse.json({ error: 'module_id or sub_topic_id is required' }, { status: 400 })
@@ -24,7 +25,7 @@ export async function POST(req: NextRequest) {
         .upsert({
           user_id: user.id,
           module_id,
-          completed: completed !== undefined ? completed : true,
+          completed,
           completed_at: completed ? new Date().toISOString() : null
         }, {
           onConflict: 'user_id,module_id'
@@ -55,7 +56,7 @@ export async function POST(req: NextRequest) {
         .upsert({
           user_id: user.id,
           sub_topic_id,
-          completed: completed !== undefined ? completed : true,
+          completed,
           completed_at: completed ? new Date().toISOString() : null
         }, {
           onConflict: 'user_id,sub_topic_id'

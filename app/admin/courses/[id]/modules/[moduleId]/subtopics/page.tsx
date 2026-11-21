@@ -3,6 +3,7 @@
 import { useEffect, useState, use } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
+import PreviewModal from '@/components/PreviewModal'
 
 interface SubTopic {
   id: string
@@ -10,6 +11,14 @@ interface SubTopic {
   title: string
   order_index: number
   is_locked: boolean
+}
+
+interface SubTopicContent {
+  id: string
+  sub_topic_id: string
+  type: 'video' | 'audio' | 'ppt' | 'pdf' | 'document'
+  title: string
+  storage_path: string
 }
 
 interface Module {
@@ -28,19 +37,36 @@ export default function ModuleSubTopicsPage({ params }: { params: Promise<{ id: 
   const [adding, setAdding] = useState(false)
   const [loading, setLoading] = useState(true)
   const [toggling, setToggling] = useState<string | null>(null)
+  const [contentByTopic, setContentByTopic] = useState<Record<string, SubTopicContent[]>>({})
+  const [preview, setPreview] = useState<{ title: string; type: SubTopicContent['type']; url: string } | null>(null)
 
   async function load() {
-    const [{ data: mod }, { data: topics }] = await Promise.all([
+    const [{ data: mod }, { data: topics }, { data: items }] = await Promise.all([
       supabase.from('modules').select('id, title').eq('id', moduleId).single(),
-      supabase.from('sub_topics').select('*').eq('module_id', moduleId).order('order_index')
+      supabase.from('sub_topics').select('*').eq('module_id', moduleId).order('order_index'),
+      supabase.from('module_content').select('id, sub_topic_id, type, title, storage_path').eq('module_id', moduleId).not('sub_topic_id', 'is', null).order('order_index')
     ])
 
     setModule(mod)
     setSubTopics(topics || [])
+    const byTopic: Record<string, SubTopicContent[]> = {}
+    for (const item of items || []) (byTopic[item.sub_topic_id] ||= []).push(item)
+    setContentByTopic(byTopic)
     setLoading(false)
   }
 
   useEffect(() => { load() }, [moduleId])
+
+  async function previewItem(item: SubTopicContent) {
+    // Video/audio go through the same-origin streaming proxy (admins are always allowed)
+    if (item.type === 'video' || item.type === 'audio') {
+      setPreview({ title: item.title, type: item.type, url: `/api/stream/${item.id}` })
+      return
+    }
+    const { data } = await supabase.storage.from('medfellow-content').createSignedUrl(item.storage_path, 3600)
+    if (data?.signedUrl) setPreview({ title: item.title, type: item.type, url: data.signedUrl })
+    else alert('Failed to load preview')
+  }
 
   async function addSubTopic(e: React.FormEvent) {
     e.preventDefault()
@@ -150,6 +176,7 @@ export default function ModuleSubTopicsPage({ params }: { params: Promise<{ id: 
                 borderRadius: 10,
                 padding: '14px 16px',
                 display: 'flex',
+                flexWrap: 'wrap',
                 alignItems: 'center',
                 gap: 12
               }}
@@ -226,9 +253,40 @@ export default function ModuleSubTopicsPage({ params }: { params: Promise<{ id: 
                   Delete
                 </button>
               </div>
+              {(contentByTopic[topic.id] || []).length > 0 && (
+                <div style={{ flexBasis: '100%', borderTop: '1px solid var(--border)', paddingTop: 10 }}>
+                  {contentByTopic[topic.id].map(item => (
+                    <div key={item.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '5px 0' }}>
+                      <span style={{ fontSize: 12.5, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--teal)', marginRight: 8, textTransform: 'uppercase' }}>{item.type}</span>
+                        {item.title}
+                      </span>
+                      <button
+                        onClick={() => previewItem(item)}
+                        style={{
+                          padding: '4px 12px', fontSize: 12, background: 'var(--white)', color: 'var(--teal)',
+                          border: '1px solid #9FE1CB', borderRadius: 6, cursor: 'pointer',
+                          fontFamily: "'DM Sans', sans-serif", flexShrink: 0
+                        }}
+                      >
+                        ▶ Preview
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           ))}
         </div>
+      )}
+      {preview && (
+        <PreviewModal
+          isOpen
+          onClose={() => setPreview(null)}
+          title={preview.title}
+          type={preview.type}
+          url={preview.url}
+        />
       )}
     </div>
   )

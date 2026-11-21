@@ -19,6 +19,9 @@ interface CourseStats {
   totalVideos: number
   completedVideos: number
   progress: number
+  timeSpentSeconds: number
+  lastAccessedAt: string | null
+  modules: { id: string; title: string; order_index: number; is_locked: boolean; completed: boolean }[]
 }
 
 interface Activity {
@@ -55,11 +58,19 @@ interface ContinueWatchingItem {
   }[]
 }
 
+interface StudyStatsProp {
+  currentStreak: number
+  longestStreak: number
+  totalStudyDays: number
+  achievements: { id: string; code: string; title: string; description: string; icon: string; unlocked: boolean }[]
+}
+
 interface Props {
   profile: any
   courseStats: CourseStats[]
   recentActivity: Activity[]
   continueWatching: ContinueWatchingItem[]
+  studyStats: StudyStatsProp
   overallStats: {
     totalCourses: number
     totalCompleted: number
@@ -296,7 +307,7 @@ function GradesTab() {
   )
 }
 
-export default function DashboardClient({ profile, courseStats, recentActivity, continueWatching, overallStats }: Props) {
+export default function DashboardClient({ profile, courseStats, recentActivity, continueWatching, studyStats, overallStats }: Props) {
   const [activeTab, setActiveTab] = useState<'overview' | 'activity' | 'progress' | 'roadmap' | 'grades'>('overview')
   const [currentDate, setCurrentDate] = useState('')
 
@@ -566,7 +577,7 @@ export default function DashboardClient({ profile, courseStats, recentActivity, 
 
       {/* Tab Content */}
       {activeTab === 'progress' ? (
-        <ProgressDashboard />
+        <ProgressDashboard courses={courseStats} studyStats={studyStats} />
       ) : activeTab === 'roadmap' ? (
         <div>
           {courseStats.length === 0 ? (
@@ -603,8 +614,8 @@ export default function DashboardClient({ profile, courseStats, recentActivity, 
                     </p>
                   </div>
                   <CourseRoadmap 
-                    modules={[]}
-                    currentModuleId={undefined}
+                    modules={course.modules}
+                    currentModuleId={course.modules.find(m => !m.is_locked && !m.completed)?.id}
                   />
                 </div>
               ))}

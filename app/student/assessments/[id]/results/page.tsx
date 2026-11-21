@@ -66,13 +66,10 @@ export default function AssessmentResultsPage({ params }: { params: Promise<{ id
 
         // Get questions if showing correct answers
         if (submissionData.assessments.show_correct_answers && submissionData.status === 'graded') {
-          const { data: questionsData } = await supabase
-            .from('assessment_questions')
-            .select('*')
-            .eq('assessment_id', submissionData.assessment_id)
-            .order('order_index')
-
-          setQuestions(questionsData || [])
+          const questionsRes = await fetch(
+            `/api/assessments/questions?assessment_id=${submissionData.assessment_id}&include_answers=1`
+          )
+          setQuestions(questionsRes.ok ? (await questionsRes.json()).questions || [] : [])
         }
       }
       setLoading(false)
